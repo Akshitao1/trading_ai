@@ -1,0 +1,6 @@
+Average CPAS (last 30 days): 3.4797
+Number of jobs: 100
+Quality adjustment: 1.2000
+Estimated CPAS (quality adjusted): 2.8997
+Seasonality factor for July: 1.0000
+Seasonality-adjusted Estimated CPAS for July: 2.8997
