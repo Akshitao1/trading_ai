@@ -1,0 +1,8 @@
+backend/
+ml/
+venv/
+*.py
+*.csv
+*.ipynb
+.env
+__pycache__/ 
