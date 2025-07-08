@@ -1,4 +1,8 @@
+fastapi
+uvicorn
 pandas
 numpy
 scikit-learn
-matplotlib 
+matplotlib
+pydantic
+python-dotenv 
