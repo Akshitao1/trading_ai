@@ -159,35 +159,35 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
         </CardHeader>
         <CardContent>
           {budgetSpendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={budgetSpendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip formatter={(value, name) => [
-                  name === 'cumulativeSpend' ? `$${value}` : `$${value}`,
-                  name === 'cumulativeSpend' ? 'Spent' : 'Remaining'
-                ]} />
-                <Area 
-                  type="monotone" 
-                  dataKey="cumulativeSpend" 
-                  stackId="1"
-                  stroke="#3B82F6" 
-                  fill="#3B82F6" 
-                  fillOpacity={0.6}
-                  name="Cumulative Spend"
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="budgetRemaining" 
-                  stackId="1"
-                  stroke="#10B981" 
-                  fill="#10B981" 
-                  fillOpacity={0.6}
-                  name="Budget Remaining"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={budgetSpendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip formatter={(value, name) => [
+                name === 'cumulativeSpend' ? `$${value}` : `$${value}`,
+                name === 'cumulativeSpend' ? 'Spent' : 'Remaining'
+              ]} />
+              <Area 
+                type="monotone" 
+                dataKey="cumulativeSpend" 
+                stackId="1"
+                stroke="#3B82F6" 
+                fill="#3B82F6" 
+                fillOpacity={0.6}
+                name="Cumulative Spend"
+              />
+              <Area 
+                type="monotone" 
+                dataKey="budgetRemaining" 
+                stackId="1"
+                stroke="#10B981" 
+                fill="#10B981" 
+                fillOpacity={0.6}
+                name="Budget Remaining"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
           ) : (
             <div className="text-gray-500 text-center py-8">No pacing data available for the selected window.</div>
           )}

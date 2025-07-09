@@ -13,6 +13,8 @@ import os
 import traceback
 import random
 import math
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -86,22 +88,46 @@ def get_seasonality_factor(target_date):
     seasonality = {6: 1.0, 7: 1.05, 8: 1.10, 9: 0.95, 10: 0.90, 11: 0.85, 12: 0.80, 1: 0.90, 2: 0.92, 3: 0.95, 4: 0.98, 5: 1.00}
     return seasonality.get(month, 1.0)
 
+# Add at the top of the file (or near other constants)
+SEASONALITY_FACTORS = {
+    1: 0.90,  # January
+    2: 0.92,
+    3: 0.95,
+    4: 0.98,
+    5: 1.00,
+    6: 1.00,  # June (reference)
+    7: 1.05,
+    8: 1.10,
+    9: 0.95,
+    10: 0.90,
+    11: 0.85,
+    12: 0.80
+}
+
 @app.get('/api/cpas-for-budget')
 def cpas_for_budget(
     budget: float = Query(..., description="Budget in dollars"),
     duration: int = Query(..., description="Duration in weeks"),
     start_date: Optional[str] = Query(None, description="Campaign start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Campaign end date (YYYY-MM-DD)")
+    end_date: Optional[str] = Query(None, description="Campaign end date (YYYY-MM-DD)"),
+    as_goal: Optional[float] = Query(None, description="Apply Starts Goal")
 ):
     """Return the average CPAS for the selected duration (using the real June daily pattern, matching date range if possible)."""
     try:
+        # --- Seasonality factor: always set at the top ---
+        if start_date:
+            user_month = pd.to_datetime(start_date).month
+        else:
+            user_month = 6  # Default to June
+        seasonality_factor = SEASONALITY_FACTORS.get(user_month, 1.0)
         # --- Dashboard caps ---
         min_budget = 5000
         min_duration = 7  # days
-        min_cpas = 2.0
+        min_cpas = 3.0
         max_cpas = 15.0
-        max_as_per_30d = 50000  # Lowered cap based on historical max
-        # Clamp input budget and duration
+        max_as_per_30d = 50000
+        
+        
         budget = max(budget, min_budget)
         if start_date and end_date:
             start_dt = pd.to_datetime(start_date)
@@ -114,6 +140,30 @@ def cpas_for_budget(
         else:
             num_days = max(int(duration * 7), min_duration)
             target_dates = [pd.Timestamp(year=2025, month=6, day=1) + pd.Timedelta(days=i) for i in range(num_days)]
+        # --- Custom logic for budget < 50000 ---
+        if budget < 50000:
+            logger.info(f"Received as_goal: {as_goal}")
+            as_goal_val = as_goal if as_goal is not None else 1
+            total_predicted_as = (budget / as_goal_val) * num_days if as_goal_val > 0 else 0
+            estimated_cpas = budget / ((370 * num_days) / 3) if num_days > 0 else 0
+            # Apply seasonality
+            total_predicted_as *= seasonality_factor
+            estimated_cpas /= seasonality_factor
+            estimated_cpas = max(estimated_cpas, min_cpas)
+            logger.info(f"Custom logic for budget < 50000: total_predicted_as={total_predicted_as}, estimated_cpas={estimated_cpas}, seasonality_factor={seasonality_factor}, as_goal_val={as_goal_val}")
+            return {
+                'start_date': str(target_dates[0].date()),
+                'end_date': str(target_dates[-1].date()),
+                'num_days': num_days,
+                'budget': float(budget),
+                'total_spend': float(budget),
+                'total_apply_starts': int(total_predicted_as),
+                'cpas': float(estimated_cpas),
+                'confidence': 1.0,
+                'pacingTrends': [],
+                'days_to_goal': None,
+                'seasonality_factor': seasonality_factor
+            }
         # --- Always use June data for model training ---
         june_days = june_daily.copy()
         # Robust regression: clip outliers, regularize
@@ -138,29 +188,95 @@ def cpas_for_budget(
         pacing_map = dict(zip(june_daily_grouped['EVENT_PUBLISHER_DATE'].dt.day, june_daily_grouped['pacing_share']))
         selected_pacing_shares = np.array([pacing_map.get(min(d.day, 30), 1/30) for d in target_dates])
         selected_pacing_shares = selected_pacing_shares / selected_pacing_shares.sum()
-        # --- Regime segmentation: fit separate model for each budget regime in June ---
+        # --- Enhanced Feature Engineering for June Days ---
         june_days = june_daily.copy()
         june_days['day_of_week'] = june_days['EVENT_PUBLISHER_DATE'].dt.dayofweek
         # One-hot encode day of week
         day_of_week_dummies = pd.get_dummies(june_days['day_of_week'], prefix='dow')
-        # Regime: assign a regime id based on budget log
-        regime_ids = []
-        for date in june_days['EVENT_PUBLISHER_DATE']:
-            if date >= pd.Timestamp('2025-06-26'):
-                regime_ids.append(3)
-            elif date >= pd.Timestamp('2025-06-09'):
-                regime_ids.append(2)
-            else:
-                regime_ids.append(1)
-        june_days['regime'] = regime_ids
+
+        # Number of jobs live per day
+        DATA1_PATH = os.path.join(DATA_DIR, 'data1.csv')
+        data1 = pd.read_csv(DATA1_PATH)
+        data1['EVENT_PUBLISHER_DATE'] = pd.to_datetime(data1['EVENT_PUBLISHER_DATE'])
+        june_data_all = data1[data1['EVENT_PUBLISHER_DATE'].dt.month == 6]
+        jobs_per_day = june_data_all.groupby('EVENT_PUBLISHER_DATE')['MAIN_REF_NUMBER'].nunique()
+        june_days = june_days.merge(jobs_per_day.rename('jobs_live'), left_on='EVENT_PUBLISHER_DATE', right_index=True, how='left')
+
+        # Average job quality score per day
+        DATA2_PATH = os.path.join(DATA_DIR, 'data2.csv')
+        jobs_quality = []
+        with open(DATA2_PATH, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                if not row.get('Job Title') and not row.get('English Job title'):
+                    continue
+                points = 0
+                title_val = (row.get('Title Appropriate?') or '').strip().lower()
+                if title_val.startswith('yes'):
+                    points += 1
+                elif title_val.startswith('partially'):
+                    points += 0.5
+                salary_val = (row.get('Salary Mentioned?') or '').strip().lower()
+                if salary_val.startswith('yes'):
+                    points += 1
+                phone_val = (row.get('Phone Number in JD') or '').strip().lower()
+                if phone_val == 'no':
+                    points += 1
+                jd_val = (row.get('JD Formatted Correctly?') or '').strip().lower()
+                if jd_val.startswith('yes'):
+                    points += 1
+                elif jd_val.startswith('partially'):
+                    points += 0.5
+                score = round((points / 4) * 100, 1)
+                jobs_quality.append(score)
+        # For demo, assign average quality to all days (can be improved with job-date mapping)
+        avg_quality = sum(jobs_quality) / len(jobs_quality) if jobs_quality else 75
+        june_days['avg_quality'] = avg_quality
+
+        # Previous day's spend and applies (momentum)
+        june_days = june_days.sort_values('EVENT_PUBLISHER_DATE')
+        june_days['prev_day_spend'] = june_days['CDSPEND'].shift(1).fillna(0)
+        june_days['prev_day_applies'] = june_days['APPLY_START'].shift(1).fillna(0)
+
+        # --- Data-driven regime segmentation using clustering ---
+        # Prepare features for clustering
+        clustering_features = [
+            june_days['CDSPEND'],
+            june_days['APPLY_START'],
+            june_days['jobs_live'],
+            june_days['avg_quality'],
+            june_days['prev_day_spend'],
+            june_days['prev_day_applies'],
+        ]
+        clustering_X = pd.concat(clustering_features, axis=1).fillna(0).astype(float)
+
+        # Auto-select optimal number of clusters (2-6) using silhouette score
+        best_score = -1
+        best_k = 2
+        for k in range(2, 7):
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            labels = kmeans.fit_predict(clustering_X)
+            score = silhouette_score(clustering_X, labels)
+            if score > best_score:
+                best_score = score
+                best_k = k
+        # Fit final k-means with best_k
+        kmeans = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+        june_days['regime'] = kmeans.fit_predict(clustering_X) + 1  # Regimes 1..k
         regime_dummies = pd.get_dummies(june_days['regime'], prefix='regime')
-        # If job count per day is available, add as feature
-        features = [june_days['CDSPEND']]
-        features.append(day_of_week_dummies)
-        features.append(regime_dummies)
-        # Concatenate all features
+
+        # Build the enhanced feature matrix
+        features = [
+            june_days['CDSPEND'],
+            june_days['jobs_live'],
+            june_days['avg_quality'],
+            june_days['prev_day_spend'],
+            june_days['prev_day_applies'],
+            day_of_week_dummies,
+            regime_dummies
+        ]
         X_full = pd.concat(features, axis=1)
-        X_full = X_full.astype(float)  # Ensure all columns are float, not boolean
+        X_full = X_full.astype(float)
         y_full = june_days['APPLY_START'].values
         # Remove outliers
         y_clip = np.clip(y_full, np.percentile(y_full, 1), np.percentile(y_full, 99))
@@ -169,9 +285,9 @@ def cpas_for_budget(
         predictions = []
         confidences = []
         total_days = 0
-        for regime_id in [1,2,3]:
+        for regime_id in range(1, best_k + 1): # Changed to 1..k for k-means clusters
             mask = (june_days['regime'] == regime_id).values  # Ensure mask is a NumPy array
-            if mask.sum() < 3:
+            if mask.sum() < 3: # Minimum 3 days for a regime
                 continue
             X_reg = X_clip[mask]
             y_reg = y_clip[mask]
@@ -183,11 +299,13 @@ def cpas_for_budget(
             regime_days = 0
             for i, d in enumerate(target_dates):
                 # Assign regime to target day based on date
-                if regime_id == 3 and d >= pd.Timestamp('2025-06-26'):
+                if regime_id == 1 and d >= pd.Timestamp('2025-06-01') and d < pd.Timestamp('2025-06-08'):
                     is_regime = True
-                elif regime_id == 2 and d >= pd.Timestamp('2025-06-09') and d < pd.Timestamp('2025-06-26'):
+                elif regime_id == 2 and d >= pd.Timestamp('2025-06-08') and d < pd.Timestamp('2025-06-15'):
                     is_regime = True
-                elif regime_id == 1 and d < pd.Timestamp('2025-06-09'):
+                elif regime_id == 3 and d >= pd.Timestamp('2025-06-15') and d < pd.Timestamp('2025-06-22'):
+                    is_regime = True
+                elif regime_id == 4 and d >= pd.Timestamp('2025-06-22') and d < pd.Timestamp('2025-06-29'):
                     is_regime = True
                 else:
                     is_regime = False
@@ -195,13 +313,13 @@ def cpas_for_budget(
                     continue
                 dow_vec = [0]*7
                 dow_vec[d.dayofweek] = 1
-                regime_vec = [0,0,0]
+                regime_vec = [0]*best_k # Changed to best_k for k-means clusters
                 regime_vec[regime_id-1] = 1
                 x = [budget * selected_pacing_shares[i]] + dow_vec + regime_vec
                 pred = float(reg.predict([x])[0])
                 pred = np.clip(pred, 0, max_as_per_30d / 3)
-                seasonality_factor = get_seasonality_factor(d)
-                pred_seasonal = pred * seasonality_factor
+                day_seasonality = get_seasonality_factor(d)
+                pred_seasonal = pred * day_seasonality
                 predictions.append(pred_seasonal)
                 regime_days += 1
             confidences.append(confidence * regime_days)
@@ -278,21 +396,50 @@ def cpas_for_budget(
         # Calculate requested daily spend
         requested_daily_spend = budget / len(target_dates) if len(target_dates) > 0 else 0
         # Piecewise/logarithmic CPAS for high spends
-        if spend_cpas_reg is not None:
-            max_hist_spend = max([x[0] for x in budget_cpas_points])
-            base_cpas = max([x[1] for x in budget_cpas_points])
-            logger.info(f"Requested daily spend: {requested_daily_spend}, Max historical: {max_hist_spend}")
-            if requested_daily_spend > max_hist_spend:
-                # Logarithmic increase: +15% for each doubling above max
-                log_factor = math.log(requested_daily_spend / max_hist_spend + 1)
-                estimated_cpas = base_cpas * (1 + 0.15 * log_factor)
-                logger.info(f"Logarithmic CPAS for high daily spend: {requested_daily_spend:.2f} -> {estimated_cpas:.2f}")
+        # --- Smoother budget-CPAS relationship ---
+        # Calculate median historical daily spend
+        hist_daily_spends = [x[0] for x in budget_cpas_points] if budget_cpas_points else []
+        if hist_daily_spends:
+            median_hist_spend = np.median(hist_daily_spends)
+        else:
+            median_hist_spend = 0
+        if spend_cpas_reg is not None and len(budget_cpas_points) >= 2:
+            # Sort points by daily spend
+            budget_cpas_points = sorted(budget_cpas_points, key=lambda x: x[0])
+            spends = [x[0] for x in budget_cpas_points]
+            cpases = [x[1] for x in budget_cpas_points]
+
+            if requested_daily_spend <= spends[0]:
+                # Extrapolate below min (assume linear trend)
+                slope = (cpases[1] - cpases[0]) / (spends[1] - spends[0])
+                estimated_cpas = cpases[0] + slope * (requested_daily_spend - spends[0])
+                logger.info(f'Extrapolated CPAS below min: {estimated_cpas:.2f}')
+            elif requested_daily_spend >= spends[-1]:
+                # Extrapolate above max (as before)
+                slope = (cpases[-1] - cpases[-2]) / (spends[-1] - spends[-2])
+                estimated_cpas = cpases[-1] + slope * (requested_daily_spend - spends[-1])
+                logger.info(f'Extrapolated CPAS above max: {estimated_cpas:.2f}')
             else:
-                estimated_cpas = base_cpas
+                # Interpolate between closest points
+                for i in range(1, len(spends)):
+                    if spends[i-1] <= requested_daily_spend <= spends[i]:
+                        slope = (cpases[i] - cpases[i-1]) / (spends[i] - spends[i-1])
+                        estimated_cpas = cpases[i-1] + slope * (requested_daily_spend - spends[i-1])
+                        logger.info(f'Interpolated CPAS: {estimated_cpas:.2f}')
+                        break
+        else:
+            # Fallback to previous logic
+            estimated_cpas = base_cpas
         # Remove hard $15 cap, but keep min_cpas
         estimated_cpas = max(estimated_cpas, min_cpas)
         # Calculate Estimated AS using the same logic as Estimated CPAS
         total_predicted_as = budget / estimated_cpas if estimated_cpas > 0 else 0
+        # --- Apply seasonality to both AS and CPAS right before return ---
+        logger.info(f"Pre-seasonality: total_predicted_as={total_predicted_as}, estimated_cpas={estimated_cpas}, seasonality_factor={seasonality_factor}")
+        total_predicted_as *= seasonality_factor
+        estimated_cpas /= seasonality_factor
+        logger.info(f"Post-seasonality: total_predicted_as={total_predicted_as}, estimated_cpas={estimated_cpas}, seasonality_factor={seasonality_factor}")
+        estimated_cpas = max(estimated_cpas, min_cpas)
         return {
             'start_date': str(target_dates[0].date()),
             'end_date': str(target_dates[-1].date()),
@@ -303,7 +450,8 @@ def cpas_for_budget(
             'cpas': float(estimated_cpas),
             'confidence': float(round(avg_confidence, 4)),
             'pacingTrends': pacingTrends,
-            'days_to_goal': days_to_goal
+            'days_to_goal': days_to_goal,
+            'seasonality_factor': seasonality_factor
         }
     except Exception as e:
         logger.error(f"Error in cpas_for_budget: {e}\n" + traceback.format_exc())
@@ -501,21 +649,23 @@ def job_impact_scenarios(
         # --- For each mapped June day, determine regime and predict ---
         june_regimes = []
         for date in mapped_june_days:
-            if date >= pd.Timestamp('2025-06-26'):
-                june_regimes.append(3)
-            elif date >= pd.Timestamp('2025-06-09'):
-                june_regimes.append(2)
-            else:
+            day = date.day
+            if day <= 7:
                 june_regimes.append(1)
+            elif day <= 14:
+                june_regimes.append(2)
+            elif day <= 21:
+                june_regimes.append(3)
+            else:
+                june_regimes.append(4)
         # For each mapped day, get June stats
         june_stats = june_daily.set_index('EVENT_PUBLISHER_DATE').loc[mapped_june_days]
         # Seasonality factor for the user's selected month
         if start_date:
             user_month = pd.to_datetime(start_date).month
         else:
-            user_month = 6
-        seasonality = {6: 1.0, 7: 1.05, 8: 1.10, 9: 0.95, 10: 0.90, 11: 0.85, 12: 0.80, 1: 0.90, 2: 0.92, 3: 0.95, 4: 0.98, 5: 1.00}
-        seasonality_factor = seasonality.get(user_month, 1.0)
+            user_month = 6  # Default to June
+        seasonality_factor = SEASONALITY_FACTORS.get(user_month, 1.0)
 
         # --- Predict for each mapped day for current and perfect quality ---
         predicted_as_current = []

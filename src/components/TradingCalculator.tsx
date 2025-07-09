@@ -21,7 +21,7 @@ export const TradingCalculator = () => {
 
   return (
     <div className="w-full max-w-7xl mx-auto">
-      <Card className="mb-6">
+      <Card className="mb-10">
         <CardHeader>
           <CardTitle className="text-2xl">Generic Campaign Analysis Calculator</CardTitle>
           <CardDescription>
