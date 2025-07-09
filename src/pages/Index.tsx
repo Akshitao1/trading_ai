@@ -37,11 +37,11 @@ const Index = () => {
               className={`text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-0 transition-opacity duration-700 ${titleVisible ? 'opacity-100' : 'opacity-0'}`}
               style={{ lineHeight: 1.1 }}
             >
-              Generic AI Trading Analytics Model
+              Joveo’s AI Scenario Planner
             </h1>
           </div>
           <div
-            className={`text-gray-500 text-lg mt-2 transition-opacity duration-700 ${taglineVisible ? 'opacity-100' : 'opacity-0'}`}
+            className={`text-gray-500 text-lg mt-0.5 transition-opacity duration-700 ${taglineVisible ? 'opacity-100' : 'opacity-0'}`}
           >
             Powered by <span className="font-semibold text-indigo-500">Joveo</span>
           </div>

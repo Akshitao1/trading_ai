@@ -23,7 +23,10 @@ export const TradingCalculator = () => {
     <div className="w-full max-w-7xl mx-auto">
       <Card className="mb-10">
         <CardHeader>
-          <CardTitle className="text-2xl">Generic Campaign Analysis Calculator</CardTitle>
+          <div className="flex items-center gap-4">
+            <img src="/amazon_logo.png" alt="Amazon Logo" style={{ height: '2.5rem', width: '2.5rem', objectFit: 'contain' }} />
+            <CardTitle className="text-2xl">Generic Campaign Analysis Calculator</CardTitle>
+          </div>
           <CardDescription>
             Enter your campaign parameters below. Our AI model will analyze your data patterns 
             and generate predictions based on machine learning algorithms trained on trading campaign datasets.
