@@ -17,6 +17,9 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [loadingScenarios, setLoadingScenarios] = useState(true);
 
+  // Extract seasonality factor from backend results (snake_case)
+  const seasonalityFactor = (results as any).seasonality_factor || 1.0;
+
   // Calculate scenarios using actual prediction logic
   useEffect(() => {
     const calculateScenarios = async () => {
@@ -50,27 +53,41 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
             ...inputs,
             budget: Math.round(inputs.budget * config.budgetMultiplier)
           };
-          try {
-            const scenarioResults = await calculatePredictions(scenarioInputs);
-            console.log(`Scenario: ${config.name}`, scenarioResults);
+          // Use explicit formulas for budget < 50000
+          if (scenarioInputs.budget < 50000) {
+            const numDays = Math.ceil((new Date(scenarioInputs.endDate).getTime() - new Date(scenarioInputs.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const asGoal = scenarioInputs.asGoal || 1;
+            const projectedAS = ((scenarioInputs.budget / asGoal) * numDays) * seasonalityFactor;
+            const cpas = (scenarioInputs.budget / ((370 * numDays) / 3)) * seasonalityFactor;
             return {
               name: config.name,
               budget: scenarioInputs.budget,
-              projectedAS: scenarioResults.projectedAS,
-              cpas: scenarioResults.estimatedCPAS,
+              projectedAS: Math.round(projectedAS),
+              cpas: parseFloat(cpas.toFixed(2)),
               risk: config.risk,
-              confidence: config.confidence
+              confidence: 0.9
             };
-          } catch (error) {
-            // fallback
-            return {
-              name: config.name,
-              budget: scenarioInputs.budget,
-              projectedAS: results.projectedAS,
-              cpas: results.estimatedCPAS,
-              risk: config.risk,
-              confidence: config.confidence
-            };
+          } else {
+            try {
+              const scenarioResults = await calculatePredictions(scenarioInputs);
+              return {
+                name: config.name,
+                budget: scenarioInputs.budget,
+                projectedAS: scenarioResults.projectedAS,
+                cpas: scenarioResults.estimatedCPAS,
+                risk: config.risk,
+                confidence: scenarioResults.confidence
+              };
+            } catch (error) {
+              return {
+                name: config.name,
+                budget: scenarioInputs.budget,
+                projectedAS: results.projectedAS,
+                cpas: results.estimatedCPAS,
+                risk: config.risk,
+                confidence: results.confidence
+              };
+            }
           }
         })
       );

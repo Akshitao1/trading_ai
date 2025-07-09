@@ -150,6 +150,18 @@ def cpas_for_budget(
             total_predicted_as *= seasonality_factor
             estimated_cpas /= seasonality_factor
             estimated_cpas = max(estimated_cpas, min_cpas)
+            # Generate pacingTrends for each day
+            pacingTrends = []
+            cumulative_spend = 0.0
+            daily_spend = budget / num_days if num_days > 0 else 0
+            for i, d in enumerate(target_dates):
+                cumulative_spend += daily_spend
+                pacingTrends.append({
+                    'day': i + 1,
+                    'date': str(d.date()),
+                    'dailySpend': round(daily_spend, 2),
+                    'cumulativeSpend': round(cumulative_spend, 2)
+                })
             logger.info(f"Custom logic for budget < 50000: total_predicted_as={total_predicted_as}, estimated_cpas={estimated_cpas}, seasonality_factor={seasonality_factor}, as_goal_val={as_goal_val}")
             return {
                 'start_date': str(target_dates[0].date()),
@@ -159,8 +171,8 @@ def cpas_for_budget(
                 'total_spend': float(budget),
                 'total_apply_starts': int(total_predicted_as),
                 'cpas': float(estimated_cpas),
-                'confidence': 1.0,
-                'pacingTrends': [],
+                'confidence': 0.9,
+                'pacingTrends': pacingTrends,
                 'days_to_goal': None,
                 'seasonality_factor': seasonality_factor
             }
