@@ -19,6 +19,7 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
   const [loadingScores, setLoadingScores] = useState(false);
   const [errorScores, setErrorScores] = useState(null);
   const [showEnglishTitle, setShowEnglishTitle] = useState(false);
+  const [recommendationFilter, setRecommendationFilter] = useState<string | null>(null);
 
   // --- Job Impact Scenario State ---
   const [impact, setImpact] = useState(null);
@@ -79,15 +80,15 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-green-600 flex items-center gap-2">
               <Star className="h-4 w-4" />
-              Overall Quality Score for Jobs
+              Overall Job Quality Score (1–10)
             </CardTitle>
           </CardHeader>
           <CardContent>
             {loadingImpact ? <div>Loading...</div> : errorImpact ? <div className="text-red-600">{errorImpact}</div> : (
               <>
-                <div className="text-2xl font-bold">{impact?.overall_quality_score}%</div>
+                <div className="text-2xl font-bold">{impact ? (impact.overall_quality_score / 10).toFixed(1) : '-'}</div>
                 <Progress value={impact?.overall_quality_score} className="mt-2 h-2" />
-                <p className="text-xs text-gray-500 mt-1">Average job quality score</p>
+                <p className="text-xs text-gray-500 mt-1">Average job quality score (1–10 scale)</p>
               </>
             )}
           </CardContent>
@@ -135,12 +136,127 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
         </Card>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          {
+            key: 'title',
+            label: 'Improve Title',
+            metric: 'Title Appropriate?',
+            bestValue: 'yes',
+            color: 'border-l-green-500',
+            icon: <Star className="h-4 w-4 text-green-600" />,
+            description: 'If all jobs had the best possible job title',
+            best: (v: string) => v.toLowerCase().startsWith('yes')
+          },
+          {
+            key: 'salary',
+            label: 'Mention Salary',
+            metric: 'Salary Mentioned?',
+            bestValue: 'yes',
+            color: 'border-l-blue-500',
+            icon: <TrendingUp className="h-4 w-4 text-blue-600" />,
+            description: 'If all jobs mentioned salary clearly',
+            best: (v: string) => v.toLowerCase().startsWith('yes')
+          },
+          {
+            key: 'phone',
+            label: 'Remove Phone number / email from JD',
+            metric: 'Phone Number in JD',
+            bestValue: 'no',
+            color: 'border-l-yellow-500',
+            icon: <Info className="h-4 w-4 text-yellow-600" />,
+            description: 'If all jobs removed phone/email from JD',
+            best: (v: string) => v.toLowerCase() === 'no'
+          },
+          {
+            key: 'jd',
+            label: 'Efficient JD',
+            metric: 'JD Formatted Correctly?',
+            bestValue: 'yes',
+            color: 'border-l-purple-500',
+            icon: <Target className="h-4 w-4 text-purple-600" />,
+            description: 'If all jobs had efficient, well-formatted JDs',
+            best: (v: string) => v.toLowerCase().startsWith('yes')
+          }
+        ].map((card) => {
+          // Count jobs impacted for this metric
+          const impactedCount = jobScores.filter(job => !card.best((job[card.metric] || ''))).length;
+          // Simulate all jobs having the best value for this metric
+          const simulatedScores = jobScores.map(job => {
+            const newJob = { ...job };
+            if (card.metric === 'Title Appropriate?') newJob[card.metric] = 'Yes';
+            if (card.metric === 'Salary Mentioned?') newJob[card.metric] = 'Yes';
+            if (card.metric === 'Phone Number in JD') newJob[card.metric] = 'No';
+            if (card.metric === 'JD Formatted Correctly?') newJob[card.metric] = 'Yes';
+            // Recalculate score
+            let points = 0;
+            if ((newJob['Title Appropriate?'] || '').toLowerCase().startsWith('yes')) points += 1;
+            else if ((newJob['Title Appropriate?'] || '').toLowerCase().startsWith('partially')) points += 0.5;
+            if ((newJob['Salary Mentioned?'] || '').toLowerCase().startsWith('yes')) points += 1;
+            if ((newJob['Phone Number in JD'] || '').toLowerCase() === 'no') points += 1;
+            if ((newJob['JD Formatted Correctly?'] || '').toLowerCase().startsWith('yes')) points += 1;
+            else if ((newJob['JD Formatted Correctly?'] || '').toLowerCase().startsWith('partially')) points += 0.5;
+            newJob['Job Quality Score'] = Math.round((points / 4) * 100);
+            return newJob;
+          });
+          const avgSimulatedQuality = simulatedScores.reduce((sum, j) => sum + (j['Job Quality Score'] || 0), 0) / (simulatedScores.length || 1);
+          // Estimate new CPAS using the same relative improvement as perfect quality
+          let improvedCPAS = impact?.cpas_current;
+          if (impact && impact.overall_quality_score && impact.cpas_if_perfect_quality) {
+            const relDelta = (impact.cpas_if_perfect_quality - impact.cpas_current) / (100 - impact.overall_quality_score);
+            improvedCPAS = impact.cpas_current + relDelta * (avgSimulatedQuality - impact.overall_quality_score);
+          }
+          const percentImprovement = impact && impact.cpas_current > 0 ? Math.round(100 * (impact.cpas_current - improvedCPAS) / impact.cpas_current) : 0;
+          return (
+            <Card key={card.key} className={`border-l-4 ${card.color}`}>
+              <CardHeader className="pb-2 flex flex-row items-center gap-2">
+                {card.icon}
+                <CardTitle className="text-sm font-medium flex items-center gap-1">
+                  {card.label}
+                  <span className="italic text-xs text-gray-500" style={{ fontSize: '0.85em' }}>({impactedCount})</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">${improvedCPAS?.toFixed(2)}</div>
+                <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
+                <p className="text-xs text-gray-500 mt-1">{card.description}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
         <Card>
           <CardHeader>
           <CardTitle>Job Quality Scores</CardTitle>
           <CardDescription>Calculated for each job based on title, salary, phone, and formatting</CardDescription>
           </CardHeader>
           <CardContent>
+          {/* Recommendation Filter Buttons */}
+          <div className="flex flex-wrap gap-2 mb-4">
+            {[
+              { key: 'title', label: 'Improve Title', metric: 'Title Appropriate?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+              { key: 'salary', label: 'Mention Salary', metric: 'Salary Mentioned?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+              { key: 'phone', label: 'Remove Phone number / email from JD', metric: 'Phone Number in JD', best: (v: string) => v.toLowerCase() === 'no' },
+              { key: 'jd', label: 'Efficient JD', metric: 'JD Formatted Correctly?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+            ].map(btn => (
+              <button
+                key={btn.key}
+                className={`px-3 py-1 rounded border ${recommendationFilter === btn.key ? 'bg-blue-600 text-white border-blue-700' : 'bg-white text-blue-700 border-blue-300'} text-xs font-semibold transition`}
+                onClick={() => setRecommendationFilter(recommendationFilter === btn.key ? null : btn.key)}
+              >
+                {btn.label}
+              </button>
+            ))}
+            {recommendationFilter && (
+              <button
+                className="px-3 py-1 rounded border bg-gray-200 text-gray-700 border-gray-400 text-xs font-semibold ml-2"
+                onClick={() => setRecommendationFilter(null)}
+              >
+                Clear Filter
+              </button>
+            )}
+          </div>
           {loadingScores && <div>Loading job quality scores...</div>}
           {errorScores && <div className="text-red-600">{errorScores}</div>}
           {!loadingScores && !errorScores && (
@@ -169,23 +285,84 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                       <th className="px-2 py-1 border">Job Title</th>
                       <th className="px-2 py-1 border">Job URL</th>
                       <th className="px-2 py-1 border">Job Quality Score (1–10)</th>
+                      <th className="px-2 py-1 border">Recommendations</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {jobScores.map((job, idx) => (
-                      <tr key={idx} className={job['Job Quality Score'] >= 75 ? 'bg-green-50' : job['Job Quality Score'] >= 50 ? 'bg-yellow-50' : 'bg-red-50'}>
-                        <td className="px-2 py-1 border">{job['REQ_ID']}</td>
-                        <td className="px-2 py-1 border">{job['Station']}</td>
-                        <td className="px-2 py-1 border">{job['DSP']}</td>
-                        <td className="px-2 py-1 border">{showEnglishTitle ? job['English Job title'] : job['Job Title']}</td>
-                        <td className="px-2 py-1 border">
-                          {job['JOB_URL'] ? (
-                            <a href={job['JOB_URL']} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Link</a>
-                          ) : ''}
-                        </td>
-                        <td className="px-2 py-1 border font-bold">{Math.round(job['Job Quality Score'] / 10)}</td>
-                      </tr>
-                    ))}
+                    {(recommendationFilter
+                      ? (() => {
+                          const btns = {
+                            title: { metric: 'Title Appropriate?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+                            salary: { metric: 'Salary Mentioned?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+                            phone: { metric: 'Phone Number in JD', best: (v: string) => v.toLowerCase() === 'no' },
+                            jd: { metric: 'JD Formatted Correctly?', best: (v: string) => v.toLowerCase().startsWith('yes') },
+                          };
+                          const { metric, best } = btns[recommendationFilter];
+                          return jobScores
+                            .filter(job => !best((job[metric] || '')))
+                            .sort((a, b) => (a['Job Quality Score'] || 0) - (b['Job Quality Score'] || 0));
+                        })()
+                      : jobScores.slice().sort((a, b) => (a['Job Quality Score'] || 0) - (b['Job Quality Score'] || 0))
+                    ).map((job, idx) => {
+                      // Determine which metric is the lowest or missing
+                      const metrics = [
+                        {
+                          key: 'Title Appropriate?',
+                          label: 'Job Title',
+                          value: (job['Title Appropriate?'] || '').toLowerCase(),
+                          score: (job['Title Appropriate?'] || '').toLowerCase().startsWith('yes') ? 1 : (job['Title Appropriate?'] || '').toLowerCase().startsWith('partially') ? 0.5 : 0
+                        },
+                        {
+                          key: 'Salary Mentioned?',
+                          label: 'Salary Mentioned',
+                          value: (job['Salary Mentioned?'] || '').toLowerCase(),
+                          score: (job['Salary Mentioned?'] || '').toLowerCase().startsWith('yes') ? 1 : 0
+                        },
+                        {
+                          key: 'Phone Number in JD',
+                          label: 'Phone Number',
+                          value: (job['Phone Number in JD'] || '').toLowerCase(),
+                          score: (job['Phone Number in JD'] || '').toLowerCase() === 'no' ? 1 : 0
+                        },
+                        {
+                          key: 'JD Formatted Correctly?',
+                          label: 'JD Formatting',
+                          value: (job['JD Formatted Correctly?'] || '').toLowerCase(),
+                          score: (job['JD Formatted Correctly?'] || '').toLowerCase().startsWith('yes') ? 1 : (job['JD Formatted Correctly?'] || '').toLowerCase().startsWith('partially') ? 0.5 : 0
+                        }
+                      ];
+                      // Find the lowest scoring metric(s)
+                      const minScore = Math.min(...metrics.map(m => m.score));
+                      const lowestMetrics = metrics.filter(m => m.score === minScore);
+                      // Build recommendation string
+                      let recommendation = '';
+                      if (minScore === 1) {
+                        recommendation = 'All key quality factors are strong.';
+                      } else {
+                        recommendation = lowestMetrics.map(m => {
+                          if (m.key === 'Title Appropriate?') return 'Improve job title clarity and relevance';
+                          if (m.key === 'Salary Mentioned?') return 'Add or clarify salary information';
+                          if (m.key === 'Phone Number in JD') return 'Remove phone number from job description';
+                          if (m.key === 'JD Formatted Correctly?') return 'Improve job description formatting';
+                          return '';
+                        }).join('; ');
+                      }
+                      return (
+                        <tr key={idx} className={job['Job Quality Score'] >= 75 ? 'bg-green-50' : job['Job Quality Score'] >= 50 ? 'bg-yellow-50' : 'bg-red-50'}>
+                          <td className="px-2 py-1 border">{job['REQ_ID']}</td>
+                          <td className="px-2 py-1 border">{job['Station']}</td>
+                          <td className="px-2 py-1 border">{job['DSP']}</td>
+                          <td className="px-2 py-1 border">{showEnglishTitle ? job['English Job title'] : job['Job Title']}</td>
+                          <td className="px-2 py-1 border">
+                            {job['JOB_URL'] ? (
+                              <a href={job['JOB_URL']} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Link</a>
+                            ) : ''}
+                          </td>
+                          <td className="px-2 py-1 border font-bold">{Math.round(job['Job Quality Score'] / 10)}</td>
+                          <td className="px-2 py-1 border">{recommendation}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
