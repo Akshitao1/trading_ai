@@ -102,7 +102,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{typeof overviewResults.budgetSpend === 'number' ? `$${overviewResults.budgetSpend.toLocaleString()}` : '-'}</div>
+            <div className="text-2xl font-bold">{typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number' ? `$${(overviewResults.projectedAS * overviewResults.estimatedCPAS).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={overviewResults.goalStatus.budgetExhausted ? "destructive" : "default"}>
                 {budgetUtilization}% Utilized

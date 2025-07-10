@@ -64,6 +64,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
               budget: scenarioInputs.budget,
               projectedAS: Math.round(projectedAS),
               cpas: parseFloat(cpas.toFixed(2)),
+              projectedSpend: Math.round(projectedAS) * parseFloat(cpas.toFixed(2)),
               risk: config.risk,
               confidence: 0.9
             };
@@ -75,6 +76,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                 budget: scenarioInputs.budget,
                 projectedAS: scenarioResults.projectedAS,
                 cpas: scenarioResults.estimatedCPAS,
+                projectedSpend: scenarioResults.projectedAS * scenarioResults.estimatedCPAS,
                 risk: config.risk,
                 confidence: scenarioResults.confidence
               };
@@ -84,6 +86,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                 budget: scenarioInputs.budget,
                 projectedAS: results.projectedAS,
                 cpas: results.estimatedCPAS,
+                projectedSpend: results.projectedAS * results.estimatedCPAS,
                 risk: config.risk,
                 confidence: results.confidence
               };
@@ -109,8 +112,12 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
     utilizationPercent: (day.cumulativeSpend / inputs.budget) * 100
   }));
 
-  const budgetUtilization = Math.round((results.budgetSpend / inputs.budget) * 100);
-  const dailyBurnRate = pacingTrends.length > 0 ? Math.round(results.budgetSpend / pacingTrends.length) : 0;
+  // Calculate budget spend as Projected AS * Estimated CPAS
+  const budgetSpend = typeof results.projectedAS === 'number' && typeof results.estimatedCPAS === 'number'
+    ? results.projectedAS * results.estimatedCPAS
+    : 0;
+  const budgetUtilization = Math.round((budgetSpend / inputs.budget) * 100);
+  const dailyBurnRate = pacingTrends.length > 0 ? Math.round(budgetSpend / pacingTrends.length) : 0;
 
   return (
     <div className="space-y-6">
@@ -126,7 +133,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
             <div className="text-2xl font-bold">{budgetUtilization}%</div>
             <Progress value={budgetUtilization} className="mt-2 h-2" />
             <p className="text-xs text-gray-500 mt-1">
-              ${results.budgetSpend.toLocaleString()} of ${inputs.budget.toLocaleString()}
+              ${budgetSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of ${inputs.budget.toLocaleString()}
             </p>
           </CardContent>
         </Card>
@@ -252,6 +259,12 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                       ${typeof scenario.cpas === 'number' ? scenario.cpas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.cpas}
                     </div>
                     <div className="text-xs text-gray-500">Estimated CPAS</div>
+                  </div>
+                  <div className="text-center p-2 bg-white rounded">
+                    <div className="text-2xl font-bold text-purple-600">
+                      ${typeof scenario.projectedSpend === 'number' ? scenario.projectedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.projectedSpend}
+                    </div>
+                    <div className="text-xs text-gray-500">Projected Spend</div>
                   </div>
                   <div className="text-center p-2 bg-white rounded">
                     <div className="text-2xl font-bold text-purple-600">
