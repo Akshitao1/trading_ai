@@ -29,7 +29,11 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
     ? (new Date(inputs.endDate).getTime() - new Date(inputs.startDate).getTime()) / (1000 * 60 * 60 * 24) + 1
     : 0;
 
-  const budgetUtilization = Math.round((overviewResults.budgetSpend / inputs.budget) * 100);
+  // Calculate budget spend as Projected AS * Estimated CPAS
+  const budgetSpend = typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number'
+    ? overviewResults.projectedAS * overviewResults.estimatedCPAS
+    : 0;
+  const budgetUtilization = Math.round((budgetSpend / inputs.budget) * 100);
   const asGoalProgress = Math.round((overviewResults.projectedAS / inputs.asGoal) * 100);
 
   // Calculate estimated and projected values using backend logic (no UI mention of boundaries)
@@ -102,7 +106,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number' ? `$${(overviewResults.projectedAS * overviewResults.estimatedCPAS).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
+            <div className="text-2xl font-bold">{typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number' ? `$${budgetSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={overviewResults.goalStatus.budgetExhausted ? "destructive" : "default"}>
                 {budgetUtilization}% Utilized
