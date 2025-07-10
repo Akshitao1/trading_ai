@@ -95,7 +95,7 @@ export const useCalculatorLogic = () => {
     try {
       // Always use backend for predictions
       const weeks = Math.max(1, Math.round((new Date(inputs.endDate).getTime() - new Date(inputs.startDate).getTime()) / (1000 * 60 * 60 * 24 * 7)));
-      const apiUrl = `https://trading-ai-7sam.onrender.com/api/cpas-for-budget?budget=${inputs.budget}&duration=${weeks}&start_date=${inputs.startDate}&end_date=${inputs.endDate}&as_goal=${inputs.asGoal}`;
+      const apiUrl = `http://localhost:8000/api/cpas-for-budget?budget=${inputs.budget}&duration=${weeks}&start_date=${inputs.startDate}&end_date=${inputs.endDate}&as_goal=${inputs.asGoal}`;
       const resp = await fetch(apiUrl);
       if (resp.ok) {
         const data = await resp.json();
@@ -141,21 +141,21 @@ export const useCalculatorLogic = () => {
 };
 
 export async function fetchBoundaries(budget: number, duration: number) {
-  const apiUrl = `https://trading-ai-7sam.onrender.com/api/boundaries-for-budget?budget=${budget}&duration=${duration}`;
+  const apiUrl = `http://localhost:8000/api/boundaries-for-budget?budget=${budget}&duration=${duration}`;
   const resp = await fetch(apiUrl);
   if (!resp.ok) throw new Error('Failed to fetch boundaries');
   return await resp.json();
 }
 
 export async function fetchJobQualityScores() {
-  const apiUrl = `https://trading-ai-7sam.onrender.com/api/job-quality-scores`;
+  const apiUrl = `http://localhost:8000/api/job-quality-scores`;
   const resp = await fetch(apiUrl);
   if (!resp.ok) throw new Error('Failed to fetch job quality scores');
   return await resp.json();
 }
 
 export async function fetchJobImpactScenarios(budget: number, duration: number, asGoal: number, startDate?: string, endDate?: string) {
-  let apiUrl = `https://trading-ai-7sam.onrender.com/api/job-impact-scenarios?budget=${budget}&duration=${duration}&as_goal=${asGoal}`;
+  let apiUrl = `http://localhost:8000/api/job-impact-scenarios?budget=${budget}&duration=${duration}&as_goal=${asGoal}`;
   if (startDate && endDate) {
     apiUrl += `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`;
   }

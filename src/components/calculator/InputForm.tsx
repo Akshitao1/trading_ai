@@ -143,6 +143,11 @@ export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) 
                 className="mt-1"
                 required
               />
+              {formData.budget > 0 && formData.budget < 5000 && (
+                <div className="text-red-600 text-xs mt-1 font-semibold">
+                  Campaign budget must be at least $5,000.
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="cpasGoal">CPAS Goal ($) - Optional</Label>
@@ -181,7 +186,7 @@ export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) 
               />
             </div>
             <div>
-              <Label htmlFor="numberOfJobs">Number of Jobs</Label>
+              <Label htmlFor="numberOfJobs">Number of Jobs - Optional</Label>
               <Input
                 id="numberOfJobs"
                 type="number"
