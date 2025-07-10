@@ -26,6 +26,9 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
   const [loadingImpact, setLoadingImpact] = useState(false);
   const [errorImpact, setErrorImpact] = useState(null);
 
+  // --- AS Improvements Toggle State ---
+  const [showASImprovements, setShowASImprovements] = useState(false);
+
   useEffect(() => {
     setLoadingScores(true);
     fetchJobQualityScores()
@@ -60,21 +63,6 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
 
   return (
     <div className="space-y-6">
-      {/* CPAS Calculation Explanation */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="font-medium text-blue-800 mb-1">Understanding CPAS and AS Volume Calculations</h4>
-              <div className="text-sm text-blue-700 space-y-1">
-                <p className="text-xs text-blue-500 mt-1">Note: Campaign-level metrics are weighted by job volume, while job-level averages are not. This is why the two values can differ significantly, especially if your campaign has a few high-performing or low-performing jobs.</p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="border-l-4 border-l-green-500">
           <CardHeader className="pb-2">
@@ -103,14 +91,20 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
           </CardHeader>
           <CardContent>
             {loadingImpact ? <div>Loading...</div> : errorImpact ? <div className="text-red-600">{errorImpact}</div> : (
-              <>
-                <div className="text-2xl font-bold text-blue-600">${impact?.cpas_if_perfect_quality?.toFixed(2)}</div>
-            <Badge variant="default" className="mt-1">
-                  {impact && impact.cpas_current > 0 ? `${Math.round(100 * (impact.cpas_current - impact.cpas_if_perfect_quality) / impact.cpas_current)}% Lower` : ''}
-            </Badge>
+              (() => {
+                // Assume overviewResults.estimatedCPAS is available
+                const overviewCPAS = results.estimatedCPAS;
+                // Calculate percent improvement with current logic
+                const percentImprovement = impact && impact.cpas_current > 0 ? Math.round(100 * (impact.cpas_current - impact.cpas_if_perfect_quality) / impact.cpas_current) : 0;
+                // Calculate new CPAS as percent lower of overviewCPAS
+                const newCPAS = overviewCPAS && percentImprovement ? (overviewCPAS * (1 - percentImprovement / 100)) : impact?.cpas_if_perfect_quality;
+                return <>
+                  <div className="text-2xl font-bold text-blue-600">{newCPAS ? `$${newCPAS.toFixed(2)}` : '-'}</div>
+                  <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
                 <p className="text-xs text-gray-500 mt-1">Based on Previous Month's patterns + quality regression analysis</p>
-                <p className="text-xs text-gray-400 mt-1">vs current job performance (${impact?.cpas_current?.toFixed(2)})</p>
-              </>
+                  <p className="text-xs text-gray-400 mt-1">vs current job performance (${overviewCPAS?.toFixed(2)})</p>
+                </>;
+              })()
             )}
           </CardContent>
         </Card>
@@ -124,23 +118,43 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
           </CardHeader>
           <CardContent>
             {loadingImpact ? <div>Loading...</div> : errorImpact ? <div className="text-red-600">{errorImpact}</div> : (
-              <>
-                <div className="text-2xl font-bold text-purple-600">{impact?.as_if_perfect_quality?.toLocaleString()}</div>
-            <Badge variant="default" className="mt-1">
-                  {impact && impact.as_current > 0 ? `${Math.abs(Math.round(100 * (impact.as_if_perfect_quality - impact.as_current) / impact.as_current))}% Higher` : ''}
-            </Badge>
+              (() => {
+                // Assume overviewResults.estimatedCPAS and projectedAS are available
+                const overviewCPAS = results.estimatedCPAS;
+                const overviewAS = results.projectedAS;
+                const percentImprovement = impact && impact.cpas_current > 0 ? Math.round(100 * (impact.cpas_current - impact.cpas_if_perfect_quality) / impact.cpas_current) : 0;
+                const newCPAS = overviewCPAS && percentImprovement ? (overviewCPAS * (1 - percentImprovement / 100)) : impact?.cpas_if_perfect_quality;
+                const newAS = newCPAS && inputs.budget ? Math.round(inputs.budget / newCPAS) : null;
+                const asPercentImprovement = overviewAS && newAS && overviewAS > 0 ? Math.round(100 * (newAS - overviewAS) / overviewAS) : 0;
+                return <>
+                  <div className="text-2xl font-bold text-purple-600">{typeof newAS === 'number' ? newAS.toLocaleString() : '-'}</div>
+                  <Badge variant="default" className="mt-1">{asPercentImprovement}% Higher</Badge>
                 <p className="text-xs text-gray-500 mt-1">Based on Previous Month's patterns + quality regression analysis</p>
-              </>
+                </>;
+              })()
             )}
           </CardContent>
         </Card>
       </div>
-      {/* CPAS Improvements Section Title */}
-      <div className="mt-8 mb-2">
-        <CardTitle className="mb-1">CPAS Improvements</CardTitle>
-        <CardDescription className="mb-3">Calculated improved CPAS and percent improvement possible from each quality enhancement.</CardDescription>
+      {/* CPAS Improvements Section Title and Toggle */}
+      <div className="mt-8 mb-2 flex items-center justify-between">
+        <div>
+          <CardTitle className="mb-1">{showASImprovements ? 'AS Improvements' : 'CPAS Improvements'}</CardTitle>
+          <CardDescription className="mb-3">{showASImprovements ? 'Calculated improved AS and percent improvement possible from each quality enhancement.' : 'Calculated improved CPAS and percent improvement possible from each quality enhancement.'}</CardDescription>
+        </div>
+        <div className="flex items-center ml-4">
+          <label className="flex items-center cursor-pointer select-none">
+            <span className={`mr-2 font-medium text-sm ${showASImprovements ? 'text-gray-400' : 'text-blue-700'}`}>CPAS</span>
+            <div className="relative">
+              <input type="checkbox" checked={showASImprovements} onChange={() => setShowASImprovements(v => !v)} className="sr-only peer" />
+              <div className="w-12 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 transition-colors"></div>
+              <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow peer-checked:translate-x-6 transition-transform"></div>
+            </div>
+            <span className={`ml-2 font-medium text-sm ${showASImprovements ? 'text-blue-700' : 'text-gray-400'}`}>AS</span>
+          </label>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
         {[
           {
             key: 'title',
@@ -204,13 +218,20 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
             return newJob;
           });
           const avgSimulatedQuality = simulatedScores.reduce((sum, j) => sum + (j['Job Quality Score'] || 0), 0) / (simulatedScores.length || 1);
-          // Estimate new CPAS using the same relative improvement as perfect quality
-          let improvedCPAS = impact?.cpas_current;
-          if (impact && impact.overall_quality_score && impact.cpas_if_perfect_quality) {
+          // Calculate percent improvement as for the main CPAS improvement card
+          const overviewCPAS = results.estimatedCPAS;
+          const overviewAS = results.projectedAS;
+          let percentImprovement = 0;
+          let newCPAS = null;
+          let newAS = null;
+          if (impact && impact.cpas_current > 0 && impact.overall_quality_score && impact.cpas_if_perfect_quality) {
             const relDelta = (impact.cpas_if_perfect_quality - impact.cpas_current) / (100 - impact.overall_quality_score);
-            improvedCPAS = impact.cpas_current + relDelta * (avgSimulatedQuality - impact.overall_quality_score);
+            const simulatedCPAS = impact.cpas_current + relDelta * (avgSimulatedQuality - impact.overall_quality_score);
+            percentImprovement = Math.round(100 * (impact.cpas_current - simulatedCPAS) / impact.cpas_current);
+            newCPAS = overviewCPAS && percentImprovement ? (overviewCPAS * (1 - percentImprovement / 100)) : null;
+            newAS = newCPAS && inputs.budget ? Math.round(inputs.budget / newCPAS) : null;
           }
-          const percentImprovement = impact && impact.cpas_current > 0 ? Math.round(100 * (impact.cpas_current - improvedCPAS) / impact.cpas_current) : 0;
+          const asPercentImprovement = overviewAS && newAS && overviewAS > 0 ? Math.round(100 * (newAS - overviewAS) / overviewAS) : 0;
           return (
             <Card key={card.key} className={`border-l-4 ${card.color}`}>
               <CardHeader className="pb-2 flex flex-row items-center gap-2">
@@ -221,8 +242,17 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">${improvedCPAS?.toFixed(2)}</div>
-                <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
+                {showASImprovements ? (
+                  <>
+                    <div className="text-2xl font-bold">{typeof newAS === 'number' ? newAS.toLocaleString() : '-'}</div>
+                    <Badge variant="default" className="mt-1">{asPercentImprovement}% Higher</Badge>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-2xl font-bold">{newCPAS ? `$${newCPAS.toFixed(2)}` : '-'}</div>
+                    <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
+                  </>
+                )}
                 <p className="text-xs text-gray-500 mt-1">{card.description}</p>
               </CardContent>
             </Card>
