@@ -127,7 +127,7 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
               <>
                 <div className="text-2xl font-bold text-purple-600">{impact?.as_if_perfect_quality?.toLocaleString()}</div>
             <Badge variant="default" className="mt-1">
-                  {impact && impact.as_current > 0 ? `${Math.round(100 * (impact.as_if_perfect_quality - impact.as_current) / impact.as_current)}% Higher` : ''}
+                  {impact && impact.as_current > 0 ? `${Math.abs(Math.round(100 * (impact.as_if_perfect_quality - impact.as_current) / impact.as_current))}% Higher` : ''}
             </Badge>
                 <p className="text-xs text-gray-500 mt-1">Based on Previous Month's patterns + quality regression analysis</p>
               </>
@@ -135,7 +135,11 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
           </CardContent>
         </Card>
       </div>
-
+      {/* CPAS Improvements Section Title */}
+      <div className="mt-8 mb-2">
+        <CardTitle className="mb-1">CPAS Improvements</CardTitle>
+        <CardDescription className="mb-3">Calculated improved CPAS and percent improvement possible from each quality enhancement.</CardDescription>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           {
@@ -348,11 +352,11 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                         }).join('; ');
                       }
                       return (
-                        <tr key={idx} className={job['Job Quality Score'] >= 75 ? 'bg-green-50' : job['Job Quality Score'] >= 50 ? 'bg-yellow-50' : 'bg-red-50'}>
-                          <td className="px-2 py-1 border">{job['REQ_ID']}</td>
-                          <td className="px-2 py-1 border">{job['Station']}</td>
-                          <td className="px-2 py-1 border">{job['DSP']}</td>
-                          <td className="px-2 py-1 border">{showEnglishTitle ? job['English Job title'] : job['Job Title']}</td>
+                      <tr key={idx} className={job['Job Quality Score'] >= 75 ? 'bg-green-50' : job['Job Quality Score'] >= 50 ? 'bg-yellow-50' : 'bg-red-50'}>
+                        <td className="px-2 py-1 border">{job['REQ_ID']}</td>
+                        <td className="px-2 py-1 border">{job['Station']}</td>
+                        <td className="px-2 py-1 border">{job['DSP']}</td>
+                        <td className="px-2 py-1 border">{showEnglishTitle ? job['English Job title'] : job['Job Title']}</td>
                           <td className="px-2 py-1 border">
                             {job['JOB_URL'] ? (
                               <a href={job['JOB_URL']} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Link</a>
@@ -360,7 +364,7 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                           </td>
                           <td className="px-2 py-1 border font-bold">{Math.round(job['Job Quality Score'] / 10)}</td>
                           <td className="px-2 py-1 border">{recommendation}</td>
-                        </tr>
+                      </tr>
                       );
                     })}
                   </tbody>
