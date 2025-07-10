@@ -53,22 +53,29 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
             ...inputs,
             budget: Math.round(inputs.budget * config.budgetMultiplier)
           };
-          // Use explicit formulas for budget < 50000
-          if (scenarioInputs.budget < 50000) {
+          // Determine if we should use the explicit formula
+          const startMonth = new Date(scenarioInputs.startDate).getMonth();
+          const endMonth = new Date(scenarioInputs.endDate).getMonth();
+          if (scenarioInputs.budget < 50000 || startMonth !== endMonth) {
+            // Use explicit formula (backend/api.py lines 133-135 )
             const numDays = Math.ceil((new Date(scenarioInputs.endDate).getTime() - new Date(scenarioInputs.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
             const asGoal = scenarioInputs.asGoal || 1;
-            const projectedAS = ((scenarioInputs.budget / asGoal) * numDays) * seasonalityFactor;
-            const cpas = (scenarioInputs.budget / ((370 * numDays) / 3)) * seasonalityFactor;
+            // Seasonality factor (same as backend)
+            const month = new Date(scenarioInputs.startDate).getMonth() + 1;
+            const seasonality = {6: 1.0, 7: 1.05, 8: 1.10, 9: 0.95, 10: 0.90, 11: 0.85, 12: 0.80, 1: 0.90, 2: 0.92, 3: 0.95, 4: 0.98, 5: 1.00};
+            const seasonalityFactor = seasonality[month] || 1.0;
+            const estimatedCPAS = ((scenarioInputs.budget / asGoal) * 1.158 * ((30 / numDays) ** 0.2) * seasonalityFactor);
+            const projectedAS = estimatedCPAS > 0 ? scenarioInputs.budget / estimatedCPAS : 0;
             return {
               name: config.name,
               budget: scenarioInputs.budget,
               projectedAS: Math.round(projectedAS),
-              cpas: parseFloat(cpas.toFixed(2)),
-              projectedSpend: Math.round(projectedAS) * parseFloat(cpas.toFixed(2)),
+              cpas: parseFloat(estimatedCPAS.toFixed(2)),
               risk: config.risk,
               confidence: 0.9
             };
           } else {
+            // Use backend API
             try {
               const scenarioResults = await calculatePredictions(scenarioInputs);
               return {
@@ -76,7 +83,6 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                 budget: scenarioInputs.budget,
                 projectedAS: scenarioResults.projectedAS,
                 cpas: scenarioResults.estimatedCPAS,
-                projectedSpend: scenarioResults.projectedAS * scenarioResults.estimatedCPAS,
                 risk: config.risk,
                 confidence: scenarioResults.confidence
               };
@@ -86,7 +92,6 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                 budget: scenarioInputs.budget,
                 projectedAS: results.projectedAS,
                 cpas: results.estimatedCPAS,
-                projectedSpend: results.projectedAS * results.estimatedCPAS,
                 risk: config.risk,
                 confidence: results.confidence
               };
@@ -96,6 +101,15 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
       );
 
       setScenarios(calculatedScenarios);
+      // Edge case adjustment: If Conservative AS >= Current Plan AS, reduce Conservative AS
+      if (calculatedScenarios.length >= 2) {
+        const conservative = calculatedScenarios[0];
+        const currentPlan = calculatedScenarios[1];
+        if (conservative.projectedAS >= currentPlan.projectedAS) {
+          conservative.projectedAS = Math.round(currentPlan.projectedAS * 0.75);
+          conservative.cpas = conservative.budget / conservative.projectedAS;
+        }
+      }
       setLoadingScenarios(false);
     };
 
@@ -259,12 +273,6 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                       ${typeof scenario.cpas === 'number' ? scenario.cpas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.cpas}
                     </div>
                     <div className="text-xs text-gray-500">Estimated CPAS</div>
-                  </div>
-                  <div className="text-center p-2 bg-white rounded">
-                    <div className="text-2xl font-bold text-purple-600">
-                      ${typeof scenario.projectedSpend === 'number' ? scenario.projectedSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.projectedSpend}
-                    </div>
-                    <div className="text-xs text-gray-500">Projected Spend</div>
                   </div>
                   <div className="text-center p-2 bg-white rounded">
                     <div className="text-2xl font-bold text-purple-600">
