@@ -46,61 +46,49 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
     }
   ];
 
-      // Use Promise.all to run all predictions in parallel
-      const calculatedScenarios = await Promise.all(
-        scenarioConfigs.map(async (config) => {
+      // --- Constants (should match backend) ---
+      const CLIENT_ACHIEVED_SPEND = 65366.24;
+      const CLIENT_ACHIEVED_AS = 11098.0;
+      const CLIENT_BUDGET = 67416.00;
+      const CLIENT_AS_GOAL_HISTORICAL = 13249.0;
+      const CLIENT_DURATION = 30.0;
+      const ALPHA = 0.2;
+      const GAMMA = 0.1;
+      const DELTA = 0.1;
+      const CLIENT_ACHIEVED_CPAS = CLIENT_ACHIEVED_SPEND / CLIENT_ACHIEVED_AS;
+      const CLIENT_TARGET_CPAS_FOR_RF = CLIENT_BUDGET / CLIENT_AS_GOAL_HISTORICAL;
+      const RF_STATIC = CLIENT_ACHIEVED_CPAS / CLIENT_TARGET_CPAS_FOR_RF;
+      const BASE_PREDICTED_CPAS_FACTOR = CLIENT_ACHIEVED_CPAS * RF_STATIC;
+
+      const calculatedScenarios = scenarioConfigs.map((config) => {
           const scenarioInputs = {
             ...inputs,
             budget: Math.round(inputs.budget * config.budgetMultiplier)
           };
-          // Determine if we should use the explicit formula
-          const startMonth = new Date(scenarioInputs.startDate).getMonth();
-          const endMonth = new Date(scenarioInputs.endDate).getMonth();
-          if (scenarioInputs.budget < 50000 || startMonth !== endMonth) {
-            // Use explicit formula (backend/api.py lines 133-135 )
-            const numDays = Math.ceil((new Date(scenarioInputs.endDate).getTime() - new Date(scenarioInputs.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            const asGoal = scenarioInputs.asGoal || 1;
-            // Seasonality factor (same as backend)
-            const month = new Date(scenarioInputs.startDate).getMonth() + 1;
-            const seasonality = {6: 1.0, 7: 1.05, 8: 1.10, 9: 0.95, 10: 0.90, 11: 0.85, 12: 0.80, 1: 0.90, 2: 0.92, 3: 0.95, 4: 0.98, 5: 1.00};
-            const seasonalityFactor = seasonality[month] || 1.0;
-            const estimatedCPAS = ((scenarioInputs.budget / asGoal) * 1.158 * ((30 / numDays) ** 0.2) * seasonalityFactor);
-            const projectedAS = estimatedCPAS > 0 ? scenarioInputs.budget / estimatedCPAS : 0;
+        const startMonth = new Date(scenarioInputs.startDate).getMonth() + 1;
+        const endMonth = new Date(scenarioInputs.endDate).getMonth() + 1;
+        const numDays = Math.ceil((new Date(scenarioInputs.endDate).getTime() - new Date(scenarioInputs.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        const asGoal = scenarioInputs.asGoal || 1;
+        // Seasonality factor (same as backend)
+        const seasonality = {6: 1.0, 7: 1.05, 8: 1.10, 9: 0.95, 10: 0.90, 11: 0.85, 12: 0.80, 1: 0.90, 2: 0.92, 3: 0.95, 4: 0.98, 5: 1.00};
+        const seasonalityFactor = seasonality[startMonth] || 1.0;
+        // --- Explicit formula ---
+        const DURATION_IMPACT_FACTOR = Math.pow(CLIENT_DURATION / numDays, ALPHA);
+        const BUDGET_SENSITIVITY_FACTOR = Math.pow(scenarioInputs.budget / CLIENT_BUDGET, GAMMA);
+        const AS_GOAL_SENSITIVITY_FACTOR = Math.pow(asGoal / CLIENT_AS_GOAL_HISTORICAL, DELTA);
+        const JOB_QUALITY_IMPACT_FACTOR = 1.0; // Placeholder
+        const estimatedCPAS = BASE_PREDICTED_CPAS_FACTOR * DURATION_IMPACT_FACTOR * BUDGET_SENSITIVITY_FACTOR * AS_GOAL_SENSITIVITY_FACTOR * JOB_QUALITY_IMPACT_FACTOR * seasonalityFactor;
+        const projectedAS = estimatedCPAS > 0 ? scenarioInputs.budget / estimatedCPAS : 0;
             return {
               name: config.name,
               budget: scenarioInputs.budget,
-              projectedAS: Math.round(projectedAS),
-              cpas: parseFloat(estimatedCPAS.toFixed(2)),
+          projectedAS: Math.round(projectedAS),
+          cpas: parseFloat(estimatedCPAS.toFixed(2)),
               risk: config.risk,
-              confidence: 0.9
+              confidence: config.confidence
             };
-          } else {
-            // Use backend API
-            try {
-              const scenarioResults = await calculatePredictions(scenarioInputs);
-              return {
-                name: config.name,
-                budget: scenarioInputs.budget,
-                projectedAS: scenarioResults.projectedAS,
-                cpas: scenarioResults.estimatedCPAS,
-                risk: config.risk,
-                confidence: scenarioResults.confidence
-              };
-            } catch (error) {
-              return {
-                name: config.name,
-                budget: scenarioInputs.budget,
-                projectedAS: results.projectedAS,
-                cpas: results.estimatedCPAS,
-                risk: config.risk,
-                confidence: results.confidence
-              };
-            }
-          }
-        })
-      );
+      });
 
-      setScenarios(calculatedScenarios);
       // Edge case adjustment: If Conservative AS >= Current Plan AS, reduce Conservative AS
       if (calculatedScenarios.length >= 2) {
         const conservative = calculatedScenarios[0];
@@ -108,8 +96,9 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
         if (conservative.projectedAS >= currentPlan.projectedAS) {
           conservative.projectedAS = Math.round(currentPlan.projectedAS * 0.75);
           conservative.cpas = conservative.budget / conservative.projectedAS;
-        }
+          }
       }
+      setScenarios(calculatedScenarios);
       setLoadingScenarios(false);
     };
 

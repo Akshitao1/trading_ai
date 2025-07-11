@@ -116,60 +116,72 @@ def cpas_for_budget(
             num_days = max(int(duration * 7), min_duration)
             target_dates = [pd.Timestamp(year=2025, month=6, day=1) + pd.Timedelta(days=i) for i in range(num_days)]
 
-        # Custom logic for budget < 50000
-        if budget < 50000:
-            # Calculate number of days
-            if start_date and end_date:
-                start_dt = pd.to_datetime(start_date)
-                end_dt = pd.to_datetime(end_date)
-                num_days = (end_dt - start_dt).days + 1
-            else:
-                num_days = max(int(duration * 7), 7)
-            # Get seasonality factor
-            seasonality_factor = get_seasonality_factor(start_date) if start_date else 1.0
-            # Use as_goal directly from query param
-            if not as_goal or as_goal <= 0:
-                as_goal = 1.0
-            estimated_cpas = ((budget / as_goal) * 1.158 * ((30 / num_days) ** 0.2) * seasonality_factor)
-            total_predicted_as = budget / estimated_cpas if estimated_cpas > 0 else 0
-            avg_confidence = 0.9
-            total_spend = budget
-            # Build pacingTrends as before
-            pacingTrends = []
-            cumulative_spend = 0.0
-            if start_date and end_date:
-                target_dates = [start_dt + pd.Timedelta(days=i) for i in range(num_days)]
-            else:
-                target_dates = [pd.Timestamp(year=2025, month=6, day=1) + pd.Timedelta(days=i) for i in range(num_days)]
-            june_daily_grouped = june_daily.groupby('EVENT_PUBLISHER_DATE').agg({'CDSPEND': 'sum'}).reset_index()
-            june_total_spend = june_daily_grouped['CDSPEND'].sum()
-            june_daily_grouped['pacing_share'] = june_daily_grouped['CDSPEND'] / june_total_spend
-            pacing_map = dict(zip(june_daily_grouped['EVENT_PUBLISHER_DATE'].dt.day, june_daily_grouped['pacing_share']))
-            for i, d in enumerate(target_dates):
-                day_num = min(d.day, 30)
-                pacing_share = pacing_map.get(day_num, 1/30)
-                day_spend = budget * pacing_share
-                cumulative_spend += day_spend
-                pacingTrends.append({
-                    'day': i + 1,
-                    'date': str(d.date()),
-                    'dailySpend': round(day_spend, 2),
-                    'cumulativeSpend': round(cumulative_spend, 2)
-                })
-            if not pacingTrends:
-                pacingTrends = [{'day': i+1, 'date': '', 'dailySpend': 0.0, 'cumulativeSpend': 0.0} for i in range(num_days)]
-            return {
-                'start_date': str(target_dates[0].date()),
-                'end_date': str(target_dates[-1].date()),
-                'num_days': num_days,
-                'budget': float(budget),
-                'total_spend': float(total_spend),
-                'total_apply_starts': int(total_predicted_as),
-                'cpas': float(estimated_cpas),
-                'confidence': float(round(avg_confidence, 4)),
-                'pacingTrends': pacingTrends,
-                'days_to_goal': None
-            }
+        # --- New formula for budget <= 100000 ---
+        # Constants
+        CLIENT_ACHIEVED_SPEND = 65366.24
+        CLIENT_ACHIEVED_AS = 11098.0
+        CLIENT_BUDGET = 67416.00
+        CLIENT_AS_GOAL_HISTORICAL = 13249.0
+        CLIENT_DURATION = 30.0
+        ALPHA = 0.2
+        GAMMA = 0.1
+        DELTA = 0.1
+        # Pre-calculated
+        CLIENT_ACHIEVED_CPAS = CLIENT_ACHIEVED_SPEND / CLIENT_ACHIEVED_AS
+        CLIENT_TARGET_CPAS_FOR_RF = CLIENT_BUDGET / CLIENT_AS_GOAL_HISTORICAL
+        RF_STATIC = CLIENT_ACHIEVED_CPAS / CLIENT_TARGET_CPAS_FOR_RF
+        BASE_PREDICTED_CPAS_FACTOR = CLIENT_ACHIEVED_CPAS * RF_STATIC
+        # User inputs
+        input_budget = budget
+        input_duration = num_days if start_date and end_date else max(int(duration * 7), 7)
+        input_as_goal = as_goal
+        # Factors
+        DURATION_IMPACT_FACTOR = (CLIENT_DURATION / input_duration) ** ALPHA
+        BUDGET_SENSITIVITY_FACTOR = (input_budget / CLIENT_BUDGET) ** GAMMA
+        AS_GOAL_SENSITIVITY_FACTOR = (input_as_goal / CLIENT_AS_GOAL_HISTORICAL) ** DELTA
+        seasonality_factor = get_seasonality_factor(start_date) if start_date else 1.0
+        JOB_QUALITY_IMPACT_FACTOR = 1.0  # Placeholder, update if you have logic
+        # Final calculations
+        estimated_cpas = BASE_PREDICTED_CPAS_FACTOR * DURATION_IMPACT_FACTOR * BUDGET_SENSITIVITY_FACTOR * AS_GOAL_SENSITIVITY_FACTOR * JOB_QUALITY_IMPACT_FACTOR * seasonality_factor
+        total_predicted_as = input_budget / estimated_cpas if estimated_cpas > 0 else 0
+        avg_confidence = 0.9
+        total_spend = input_budget
+        # Build pacingTrends as before
+        pacingTrends = []
+        cumulative_spend = 0.0
+        if start_date and end_date:
+            target_dates = [start_dt + pd.Timedelta(days=i) for i in range(num_days)]
+        else:
+            target_dates = [pd.Timestamp(year=2025, month=6, day=1) + pd.Timedelta(days=i) for i in range(num_days)]
+        june_daily_grouped = june_daily.groupby('EVENT_PUBLISHER_DATE').agg({'CDSPEND': 'sum'}).reset_index()
+        june_total_spend = june_daily_grouped['CDSPEND'].sum()
+        june_daily_grouped['pacing_share'] = june_daily_grouped['CDSPEND'] / june_total_spend
+        pacing_map = dict(zip(june_daily_grouped['EVENT_PUBLISHER_DATE'].dt.day, june_daily_grouped['pacing_share']))
+        for i, d in enumerate(target_dates):
+            day_num = min(d.day, 30)
+            pacing_share = pacing_map.get(day_num, 1/30)
+            day_spend = input_budget * pacing_share
+            cumulative_spend += day_spend
+            pacingTrends.append({
+                'day': i + 1,
+                'date': str(d.date()),
+                'dailySpend': round(day_spend, 2),
+                'cumulativeSpend': round(cumulative_spend, 2)
+            })
+        if not pacingTrends:
+            pacingTrends = [{'day': i+1, 'date': '', 'dailySpend': 0.0, 'cumulativeSpend': 0.0} for i in range(num_days)]
+        return {
+            'start_date': str(target_dates[0].date()),
+            'end_date': str(target_dates[-1].date()),
+            'num_days': num_days,
+            'budget': float(input_budget),
+            'total_spend': float(total_spend),
+            'total_apply_starts': int(total_predicted_as),
+            'cpas': float(estimated_cpas),
+            'confidence': float(round(avg_confidence, 4)),
+            'pacingTrends': pacingTrends,
+            'days_to_goal': None
+        }
         # --- Always use June data for model training ---
         june_days = june_daily.copy()
         # Robust regression: clip outliers, regularize

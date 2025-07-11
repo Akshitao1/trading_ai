@@ -119,8 +119,8 @@ export const useCalculatorLogic = () => {
           confidence: typeof data.confidence === 'number' ? data.confidence : 0.95
         };
       setResults(results);
-      console.log('Backend results:', results); // DEBUG: Log backend results to check if they change with date edits
-      return results;
+      console.log('Backend results:', results);
+        return results;
       } else {
         throw new Error('Backend prediction failed');
       }
