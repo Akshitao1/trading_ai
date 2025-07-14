@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 import pandas as pd
 import numpy as np
@@ -13,12 +14,86 @@ import os
 import traceback
 import random
 import math
+from datetime import datetime, timedelta
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# JWT Configuration
+SECRET_KEY = "your-secret-key-here-change-in-production"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60  # 30 days
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+# Predefined users database
+USERS_DB = {
+    "greenpet@amazon.com": "A7x2pQ9w",
+    "bridokoh@amazon.com": "J4m8sT2z",
+    "adnan@joveo.com": "L6v3nR1b",
+    "nishant@joveo.com": "Q2k7dW5e",
+    "akshita@joveo.com": "Z9b5cU8q",
+    "jinal@joveo.com": "P9b5cO8q",
+    "roohi@joveo.com": "G2k7dK5e",
+    "vandit@joveo.com": "L6v3nI1b"
+}
+
+# Pydantic models
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    email: str
+
 app = FastAPI()
+
+# Authentication functions
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def authenticate_user(email: str, password: str):
+    if email in USERS_DB and USERS_DB[email] == password:
+        return email
+    return False
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        if email not in USERS_DB:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    return email
 
 # Allow CORS for local frontend dev
 app.add_middleware(
@@ -74,6 +149,38 @@ daily = daily.sort_values('EVENT_PUBLISHER_DATE')
 
 logger.info("API initialization complete")
 
+# --- Authentication endpoints ---
+@app.post("/api/login", response_model=TokenResponse)
+async def login(request: LoginRequest):
+    """
+    Authenticate user and return access token
+    """
+    try:
+        user_email = authenticate_user(request.email, request.password)
+        if not user_email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user_email}, expires_delta=access_token_expires
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            email=user_email
+        )
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error during login"
+        )
+
 # --- Seasonality factor helper ---
 def get_seasonality_factor(target_date):
     """
@@ -92,7 +199,8 @@ def cpas_for_budget(
     duration: int = Query(..., description="Duration in weeks"),
     start_date: Optional[str] = Query(None, description="Campaign start date (YYYY-MM-DD)"),
     end_date: Optional[str] = Query(None, description="Campaign end date (YYYY-MM-DD)"),
-    as_goal: float = Query(..., description="Apply Starts Goal")
+    as_goal: float = Query(..., description="Apply Starts Goal"),
+    current_user: str = Depends(get_current_user)
 ):
     """Return the average CPAS for the selected duration (using the real June daily pattern, matching date range if possible)."""
     try:
@@ -378,7 +486,11 @@ def cpas_for_budget(
         return {"error": f"Calculation failed: {str(e)}"}
 
 @app.get('/api/boundaries-for-budget')
-def boundaries_for_budget(budget: float = Query(...), duration: int = Query(...)):
+def boundaries_for_budget(
+    budget: float = Query(...), 
+    duration: int = Query(...),
+    current_user: str = Depends(get_current_user)
+):
     try:
         logger.info(f"Calculating boundaries for budget: ${budget}, duration: {duration}")
         # Get the best and worst CPAS days for the selected duration
@@ -420,7 +532,7 @@ def boundaries_for_budget(budget: float = Query(...), duration: int = Query(...)
         return {"error": f"Boundaries calculation failed: {str(e)}"}
 
 @app.get('/api/job-quality-scores')
-def job_quality_scores():
+def job_quality_scores(current_user: str = Depends(get_current_user)):
     try:
         logger.info("Loading job quality scores...")
         DATA2_PATH = os.path.join(DATA_DIR, 'data2.csv')
@@ -483,7 +595,8 @@ def job_impact_scenarios(
     duration: int = Query(...),
     as_goal: int = Query(...),
     start_date: Optional[str] = Query(None, description="Campaign start date (YYYY-MM-DD)"),
-    end_date: Optional[str] = Query(None, description="Campaign end date (YYYY-MM-DD)")
+    end_date: Optional[str] = Query(None, description="Campaign end date (YYYY-MM-DD)"),
+    current_user: str = Depends(get_current_user)
 ):
     try:
         logger.info(f"Calculating job impact scenarios for budget: ${budget}, duration: {duration}, AS goal: {as_goal}, start_date: {start_date}, end_date: {end_date}")
