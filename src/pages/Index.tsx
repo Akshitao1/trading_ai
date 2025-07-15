@@ -77,7 +77,7 @@ const Index = () => {
                 onClick={() => setCurrency('BRL')}
                 style={{ outline: 'none', border: 'none', background: 'none', zIndex: 1 }}
               >
-                BRL (B$)
+                BRL (R$)
               </button>
             </div>
           </div>

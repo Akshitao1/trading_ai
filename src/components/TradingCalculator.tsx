@@ -25,7 +25,7 @@ export const TradingCalculator: React.FC<TradingCalculatorProps> = ({ currency, 
   };
 
   const exchangeRates = { USD: 1, BRL: 5.59 };
-  const currencySymbols = { USD: '$', BRL: 'B$' };
+  const currencySymbols = { USD: '$', BRL: 'R$' };
   function convertCurrency(amountUSD: number, currency: 'USD' | 'BRL') {
     return amountUSD * exchangeRates[currency];
   }
