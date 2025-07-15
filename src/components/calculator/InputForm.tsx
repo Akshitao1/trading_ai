@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,9 +10,14 @@ import { useToast } from '@/hooks/use-toast';
 interface InputFormProps {
   onCalculate: (inputs: TradingInputs) => void;
   isLoading: boolean;
+  currency: 'USD' | 'BRL';
+  setCurrency: React.Dispatch<React.SetStateAction<'USD' | 'BRL'>>;
+  currencySymbols: { [key: string]: string };
+  exchangeRates: { [key: string]: number };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
-export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) => {
+export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading, currency, setCurrency, currencySymbols, exchangeRates, convertCurrency }) => {
   const { toast } = useToast();
   const [formData, setFormData] = useState<TradingInputs>({
     budget: 0,
@@ -23,6 +28,22 @@ export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) 
     numberOfJobs: undefined
   });
   const [showDurationWarning, setShowDurationWarning] = useState(false);
+  const prevCurrency = useRef(currency);
+
+  useEffect(() => {
+    if (prevCurrency.current !== currency) {
+      setFormData((prev) => ({
+        ...prev,
+        budget: prev.budget
+          ? (prev.budget / exchangeRates[prevCurrency.current]) * exchangeRates[currency]
+          : prev.budget,
+        cpasGoal: prev.cpasGoal
+          ? (prev.cpasGoal / exchangeRates[prevCurrency.current]) * exchangeRates[currency]
+          : prev.cpasGoal,
+      }));
+      prevCurrency.current = currency;
+    }
+  }, [currency, exchangeRates]);
 
   const handleInputChange = (field: keyof TradingInputs, value: string | number) => {
     setFormData(prev => ({
@@ -112,7 +133,10 @@ export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) 
     e.preventDefault();
     
     if (validateForm()) {
-      onCalculate(formData);
+      // Convert budget and cpasGoal to USD before sending to backend
+      const budgetUSD = currency === 'BRL' ? formData.budget / exchangeRates['BRL'] : formData.budget;
+      const cpasGoalUSD = currency === 'BRL' && formData.cpasGoal ? formData.cpasGoal / exchangeRates['BRL'] : formData.cpasGoal;
+      onCalculate({ ...formData, budget: budgetUSD, cpasGoal: cpasGoalUSD });
       toast({
         title: "Analysis Started",
         description: "AI model is processing your campaign data...",
@@ -133,29 +157,29 @@ export const InputForm: React.FC<InputFormProps> = ({ onCalculate, isLoading }) 
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="budget">Campaign Budget ($)</Label>
+              <Label htmlFor="budget">Campaign Budget ({currencySymbols[currency]})</Label>
               <Input
                 id="budget"
                 type="number"
-                placeholder="Enter total budget"
+                placeholder={`Enter total budget in ${currency}`}
                 value={formData.budget || ''}
                 onChange={(e) => handleInputChange('budget', parseFloat(e.target.value) || 0)}
                 className="mt-1"
                 required
               />
-              {formData.budget > 0 && formData.budget < 5000 && (
+              {formData.budget > 0 && formData.budget < (currency === 'BRL' ? 27950 : 5000) && (
                 <div className="text-red-600 text-xs mt-1 font-semibold">
-                  Campaign budget must be at least $5,000.
+                  Campaign budget must be at least {currency === 'BRL' ? 'BR$27,950' : '$5,000'}.
                 </div>
               )}
             </div>
             <div>
-              <Label htmlFor="cpasGoal">CPAS Goal ($) - Optional</Label>
+              <Label htmlFor="cpasGoal">CPAS Goal ({currencySymbols[currency]}) - Optional</Label>
               <Input
                 id="cpasGoal"
                 type="number"
                 step="0.01"
-                placeholder="Target cost per apply start"
+                placeholder={`Target cost per apply start in ${currency}`}
                 value={formData.cpasGoal || ''}
                 onChange={(e) => handleInputChange('cpasGoal', parseFloat(e.target.value) || undefined)}
                 className="mt-1"

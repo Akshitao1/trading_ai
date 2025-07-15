@@ -10,9 +10,12 @@ import { useCalculatorLogic } from '@/hooks/useCalculatorLogic';
 interface BudgetOptimizationProps {
   results: PredictionResults;
   inputs: TradingInputs;
+  currency: 'USD' | 'BRL';
+  currencySymbols: { [key: string]: string };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
-export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results, inputs }) => {
+export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results, inputs, currency, currencySymbols, convertCurrency }) => {
   const { calculatePredictions } = useCalculatorLogic();
   const [scenarios, setScenarios] = useState<any[]>([]);
   const [loadingScenarios, setLoadingScenarios] = useState(true);
@@ -136,7 +139,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
             <div className="text-2xl font-bold">{budgetUtilization}%</div>
             <Progress value={budgetUtilization} className="mt-2 h-2" />
             <p className="text-xs text-gray-500 mt-1">
-              ${budgetSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of ${inputs.budget.toLocaleString()}
+              {currencySymbols[currency]}{convertCurrency(budgetSpend, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} of {currencySymbols[currency]}{convertCurrency(inputs.budget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </CardContent>
         </Card>
@@ -149,7 +152,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{pacingTrends.length > 0 ? `$${dailyBurnRate}` : '-'}</div>
+            <div className="text-2xl font-bold">{pacingTrends.length > 0 ? `${currencySymbols[currency]}${convertCurrency(dailyBurnRate, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
             <Badge variant="default" className="mt-1">
               Per Day Average
             </Badge>
@@ -192,7 +195,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
               <XAxis dataKey="day" />
               <YAxis />
               <Tooltip formatter={(value, name) => [
-                name === 'cumulativeSpend' ? `$${value}` : `$${value}`,
+                name === 'cumulativeSpend' ? `${currencySymbols[currency]}${convertCurrency(typeof value === 'number' ? value : Number(value), currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : `${currencySymbols[currency]}${convertCurrency(typeof value === 'number' ? value : Number(value), currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
                 name === 'cumulativeSpend' ? 'Spent' : 'Remaining'
               ]} />
               <Area 
@@ -244,7 +247,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                   <div>
                     <h4 className="font-semibold text-lg">{scenario.name}</h4>
                     <p className="text-sm text-gray-600">
-                      Budget: ${scenario.budget.toLocaleString()} | Risk Level: {scenario.risk}
+                      Budget: {currencySymbols[currency]}{convertCurrency(scenario.budget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Risk Level: {scenario.risk}
                     </p>
                   </div>
                   <Badge variant={scenario.name === 'Current Plan' ? "default" : "secondary"}>
@@ -259,7 +262,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                   </div>
                   <div className="text-center p-2 bg-white rounded">
                     <div className="text-2xl font-bold text-blue-600">
-                      ${typeof scenario.cpas === 'number' ? scenario.cpas.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.cpas}
+                      {currencySymbols[currency]}{typeof scenario.cpas === 'number' ? convertCurrency(scenario.cpas, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : scenario.cpas}
                     </div>
                     <div className="text-xs text-gray-500">Estimated CPAS</div>
                   </div>
@@ -329,7 +332,7 @@ export const BudgetOptimization: React.FC<BudgetOptimizationProps> = ({ results,
                     if (extraBudget > 0) {
                       return (
                         <div className="mt-2 text-sm text-blue-900 font-semibold">
-                          To meet your Apply Starts goal of {inputs.asGoal.toLocaleString()}, you would need approximately ${extraBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })} more budget (total required: ${requiredBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })}).
+                          To meet your Apply Starts goal of {inputs.asGoal.toLocaleString()}, you would need approximately {currencySymbols[currency]}{convertCurrency(extraBudget, currency).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })} more budget (total required: {currencySymbols[currency]}{convertCurrency(requiredBudget, currency).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}).
                         </div>
                       );
                     }

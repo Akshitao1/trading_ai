@@ -4,9 +4,12 @@ import { PredictionResults, TradingInputs } from '@/types/trading';
 interface JoveoRecommendationsProps {
   results: PredictionResults;
   inputs: TradingInputs;
+  currency: 'USD' | 'BRL';
+  currencySymbols: { [key: string]: string };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
-export const JoveoRecommendations: React.FC<JoveoRecommendationsProps> = ({ results, inputs }) => {
+export const JoveoRecommendations: React.FC<JoveoRecommendationsProps> = ({ results, inputs, currency, currencySymbols, convertCurrency }) => {
   let appropriateEndDate = '';
   if (inputs.startDate && results.daysToGoal) {
     const start = new Date(inputs.startDate);
@@ -27,7 +30,7 @@ export const JoveoRecommendations: React.FC<JoveoRecommendationsProps> = ({ resu
     if (extraBudget > 0) {
       budgetInsight = (
         <div className="mt-2 text-sm text-green-900 font-semibold">
-          To meet your Apply Starts goal of {inputs.asGoal.toLocaleString()}, you would need approximately ${extraBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })} more budget (total required: ${requiredBudget.toLocaleString(undefined, { maximumFractionDigits: 0 })}).
+          To meet your Apply Starts goal of {inputs.asGoal.toLocaleString()}, you would need approximately {currencySymbols[currency]}{convertCurrency(extraBudget, currency).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })} more budget (total required: {currencySymbols[currency]}{convertCurrency(requiredBudget, currency).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}).
         </div>
       );
     }

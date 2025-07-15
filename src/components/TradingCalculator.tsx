@@ -10,7 +10,12 @@ import { useCalculatorLogic } from '@/hooks/useCalculatorLogic';
 import { TradingInputs } from '@/types/trading';
 import { JoveoRecommendations } from './calculator/JoveoRecommendations';
 
-export const TradingCalculator = () => {
+interface TradingCalculatorProps {
+  currency: 'USD' | 'MXN' | 'BRL';
+  setCurrency: React.Dispatch<React.SetStateAction<'USD' | 'MXN' | 'BRL'>>;
+}
+
+export const TradingCalculator: React.FC<TradingCalculatorProps> = ({ currency, setCurrency }) => {
   const [inputs, setInputs] = useState<TradingInputs | null>(null);
   const { results, isCalculating, calculatePredictions } = useCalculatorLogic();
 
@@ -18,6 +23,12 @@ export const TradingCalculator = () => {
     setInputs(formInputs);
     await calculatePredictions(formInputs);
   };
+
+  const exchangeRates = { USD: 1, BRL: 5.59 };
+  const currencySymbols = { USD: '$', BRL: 'B$' };
+  function convertCurrency(amountUSD: number, currency: 'USD' | 'BRL') {
+    return amountUSD * exchangeRates[currency];
+  }
 
   return (
     <div className="w-full max-w-7xl mx-auto">
@@ -33,7 +44,7 @@ export const TradingCalculator = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <InputForm onCalculate={handleCalculate} isLoading={isCalculating} />
+          <InputForm onCalculate={handleCalculate} isLoading={isCalculating} currency={currency} setCurrency={setCurrency} currencySymbols={currencySymbols} exchangeRates={exchangeRates} convertCurrency={convertCurrency} />
         </CardContent>
       </Card>
 
@@ -48,19 +59,19 @@ export const TradingCalculator = () => {
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
-            <ResultsDashboard results={results} inputs={inputs!} />
+            <ResultsDashboard results={results} inputs={inputs!} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
           </TabsContent>
 
           <TabsContent value="pacing" className="mt-6">
-            <PacingAnalysis results={results} inputs={inputs!} />
+            <PacingAnalysis results={results} inputs={inputs!} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
           </TabsContent>
 
           <TabsContent value="job-impact" className="mt-6">
-            <JobImpactAnalysis results={results} inputs={inputs!} />
+            <JobImpactAnalysis results={results} inputs={inputs!} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
           </TabsContent>
 
           <TabsContent value="budget" className="mt-6">
-            <BudgetOptimization results={results} inputs={inputs!} />
+            <BudgetOptimization results={results} inputs={inputs!} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
           </TabsContent>
 
           <TabsContent value="recommendations" className="mt-6">
@@ -72,7 +83,7 @@ export const TradingCalculator = () => {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <JoveoRecommendations results={results} inputs={inputs!} />
+                <JoveoRecommendations results={results} inputs={inputs!} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
                 <div className="space-y-4">
                   {results.recommendations.map((rec, index) => (
                     <div key={index} className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border-l-4 border-l-blue-500">

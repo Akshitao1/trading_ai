@@ -11,6 +11,9 @@ import { useCalculatorLogic, fetchBoundaries } from '@/hooks/useCalculatorLogic'
 interface PacingAnalysisProps {
   results: PredictionResults;
   inputs: TradingInputs;
+  currency: 'USD' | 'BRL';
+  currencySymbols: { [key: string]: string };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
 // Helper to get week number in June (1-based)
@@ -40,7 +43,7 @@ for (let w = 1; w <= 4; w++) {
 }
 
 // Add the PacingScenarioSlider component
-const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
+const PacingScenarioSlider = ({ inputs, currentResults, overviewResults, currency, currencySymbols, convertCurrency }) => {
   const { calculatePredictions } = useCalculatorLogic();
   const [budgetPct, setBudgetPct] = useState(1); // 1 = 100%
   const [duration, setDuration] = useState(30); // default 30 days
@@ -106,7 +109,7 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
       </CardHeader>
       <CardContent>
         <div className="mb-4">
-          <label className="block font-medium mb-1">Budget: ${Math.round(inputs.budget * budgetPct).toLocaleString()}</label>
+          <label className="block font-medium mb-1">Budget: {currencySymbols[currency]}{convertCurrency(Math.round(inputs.budget * budgetPct), currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</label>
           <input
             type="range"
             min={0.5}
@@ -117,8 +120,8 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
             style={{ width: '100%' }}
           />
           <div className="flex justify-between text-xs">
-            <span>${minBudget.toLocaleString()}</span>
-            <span>${maxBudget.toLocaleString()}</span>
+            <span>{currencySymbols[currency]}{convertCurrency(minBudget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span>{currencySymbols[currency]}{convertCurrency(maxBudget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
         </div>
         <div className="mb-4">
@@ -144,7 +147,7 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
               <b>How do these numbers change?</b> As you adjust the budget or duration sliders, Projected CPAS and Apply Starts update in real time. Increasing the budget or extending the duration typically lowers CPAS (cost per apply start) and increases total Apply Starts, while reducing budget or shortening duration usually raises CPAS and lowers Apply Starts. The model uses historical pacing and seasonality to estimate these changes.
             </div>
             <div>
-              <b>Projected CPAS:</b> ${typeof scenario.estimatedCPAS === 'number' ? scenario.estimatedCPAS.toFixed(2) : '-'}
+              <b>Projected CPAS:</b> {currencySymbols[currency]}{typeof scenario.estimatedCPAS === 'number' ? convertCurrency(scenario.estimatedCPAS, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
               <span className={scenario.estimatedCPAS < baseline.estimatedCPAS ? 'text-green-600 ml-2' : 'text-red-600 ml-2'}>
                 {scenario.estimatedCPAS < baseline.estimatedCPAS
                   ? `↓ ${(100 * (baseline.estimatedCPAS - scenario.estimatedCPAS) / baseline.estimatedCPAS).toFixed(1)}%`
@@ -157,7 +160,7 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
               <b>Projected Apply Starts:</b> {typeof scenario.projectedAS === 'number' ? scenario.projectedAS.toLocaleString() : '-'}
             </div>
             <div>
-              <b>Projected Spend:</b> ${typeof scenario.budgetSpend === 'number' ? scenario.budgetSpend.toLocaleString() : '-'}
+              <b>Projected Spend:</b> {currencySymbols[currency]}{typeof scenario.budgetSpend === 'number' ? convertCurrency(scenario.budgetSpend, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
             </div>
           </div>
         )}
@@ -169,14 +172,14 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
               <div className="border rounded p-3 bg-gray-50">
                 <div className="font-semibold text-green-700">Maximum Delivery</div>
                 <div>Apply Starts: <b>{boundaries.max_apply_starts.toLocaleString()}</b></div>
-                <div>Spend: <b>${boundaries.max_spend.toLocaleString()}</b></div>
-                <div>CPAS: <b>${boundaries.max_cpas.toFixed(2)}</b></div>
+                <div>Spend: <b>{currencySymbols[currency]}{convertCurrency(boundaries.max_spend, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
+                <div>CPAS: <b>{currencySymbols[currency]}{convertCurrency(boundaries.max_cpas, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
               </div>
               <div className="border rounded p-3 bg-gray-50">
                 <div className="font-semibold text-red-700">Minimum Delivery</div>
                 <div>Apply Starts: <b>{boundaries.min_apply_starts.toLocaleString()}</b></div>
-                <div>Spend: <b>${boundaries.min_spend.toLocaleString()}</b></div>
-                <div>CPAS: <b>${boundaries.min_cpas.toFixed(2)}</b></div>
+                <div>Spend: <b>{currencySymbols[currency]}{convertCurrency(boundaries.min_spend, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
+                <div>CPAS: <b>{currencySymbols[currency]}{convertCurrency(boundaries.min_cpas, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></div>
               </div>
             </div>
           )}
@@ -186,7 +189,7 @@ const PacingScenarioSlider = ({ inputs, currentResults, overviewResults }) => {
   );
 };
 
-export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs }) => {
+export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs, currency, currencySymbols, convertCurrency }) => {
   // --- Get seasonality factor for selected month ---
   const marketSeasonality = {
     Jan: 0.9, Feb: 0.95, Mar: 1.0, Apr: 1.05, May: 1.1, Jun: 1.2,
@@ -453,7 +456,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
 
   return (
     <div className="space-y-6">
-      <PacingScenarioSlider inputs={inputs} currentResults={results} overviewResults={results} />
+      <PacingScenarioSlider inputs={inputs} currentResults={results} overviewResults={results} currency={currency} currencySymbols={currencySymbols} convertCurrency={convertCurrency} />
       <Tabs defaultValue="daywise">
         <TabsList>
           <TabsTrigger value="daywise">Date-wise</TabsTrigger>
@@ -510,8 +513,9 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   />
                   <Tooltip
                     formatter={(value, name, props) => {
+                      const numValue = typeof value === 'number' ? value : Number(value);
                       return [
-                        `$${value}`,
+                        `${currencySymbols[currency]}${convertCurrency(numValue, currency).toFixed(2)}`,
                         name === 'cpas' ? 'CPAS (Seasonally Adjusted)' : name
                       ];
                     }}
@@ -527,7 +531,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                         <div className="bg-white p-3 rounded shadow text-xs">
                           <div><b>Date:</b> {d.day}</div>
                           <div><b>Week:</b> {d.week}</div>
-                          <div><b>CPAS:</b> {d.cpas !== null && d.cpas !== undefined ? `$${d.cpas.toFixed(2)}` : 'N/A'}</div>
+                          <div><b>CPAS:</b> {d.cpas !== null && d.cpas !== undefined ? `${currencySymbols[currency]}${convertCurrency(d.cpas, currency).toFixed(2)}` : 'N/A'}</div>
                           {d.cpasMA !== null && d.cpasMA !== undefined && (
                             <div><b>7-Day MA:</b> ${d.cpasMA.toFixed(2)}</div>
                           )}
@@ -576,7 +580,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                     strokeDasharray="5 5"
                     opacity={0.6}
                   />
-                  <Tooltip formatter={(v, n) => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={(v, n) => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Legend />
               </LineChart>
             </ResponsiveContainer>
@@ -618,7 +622,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                     strokeDasharray="5 5"
                     opacity={0.6}
                   />
-                  <Tooltip formatter={(v, n) => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={(v, n) => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Legend />
                 </LineChart>
               </ResponsiveContainer>
@@ -637,7 +641,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `$${v.toFixed(2)}` : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgCPAS" fill="#8B5CF6" name="Avg CPAS" />
                 </BarChart>
               </ResponsiveContainer>
@@ -654,7 +658,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgAS" fill="#22C55E" name="Avg Apply Start" />
                 </BarChart>
               </ResponsiveContainer>
@@ -671,7 +675,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="day" />
                   <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgSpend" fill="#3B82F6" name="Avg Spend" />
                 </BarChart>
               </ResponsiveContainer>
@@ -690,7 +694,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="week" />
                   <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `$${v.toFixed(2)}` : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgCPAS" fill="#F59E42" name="Avg CPAS" />
                 </BarChart>
               </ResponsiveContainer>
@@ -707,7 +711,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="week" />
                 <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgAS" fill="#22C55E" name="Avg Apply Start" />
               </BarChart>
             </ResponsiveContainer>
@@ -724,7 +728,7 @@ export const PacingAnalysis: React.FC<PacingAnalysisProps> = ({ results, inputs 
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="week" />
                   <YAxis />
-                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? v.toFixed(2) : 'N/A'} />
+                  <Tooltip formatter={v => (typeof v === 'number' && v !== null) ? `${currencySymbols[currency]}${convertCurrency(v, currency).toFixed(2)}` : 'N/A'} />
                   <Bar dataKey="avgSpend" fill="#3B82F6" name="Avg Spend" />
                 </BarChart>
               </ResponsiveContainer>

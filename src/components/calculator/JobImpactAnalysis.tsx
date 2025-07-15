@@ -9,9 +9,12 @@ import { fetchJobQualityScores, fetchJobImpactScenarios } from '@/hooks/useCalcu
 interface JobImpactAnalysisProps {
   results: PredictionResults;
   inputs: TradingInputs;
+  currency: 'USD' | 'BRL';
+  currencySymbols: { [key: string]: string };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
-export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, inputs }) => {
+export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, inputs, currency, currencySymbols, convertCurrency }) => {
   const { jobImpact } = results;
 
   // --- Job Quality Table State ---
@@ -99,10 +102,10 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                 // Calculate new CPAS as percent lower of overviewCPAS
                 const newCPAS = overviewCPAS && percentImprovement ? (overviewCPAS * (1 - percentImprovement / 100)) : impact?.cpas_if_perfect_quality;
                 return <>
-                  <div className="text-2xl font-bold text-blue-600">{newCPAS ? `$${newCPAS.toFixed(2)}` : '-'}</div>
+                  <div className="text-2xl font-bold text-blue-600">{newCPAS ? `${currencySymbols[currency]}${convertCurrency(newCPAS, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
                   <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
                 <p className="text-xs text-gray-500 mt-1">Based on Previous Month's patterns + quality regression analysis</p>
-                  <p className="text-xs text-gray-400 mt-1">vs current job performance (${overviewCPAS?.toFixed(2)})</p>
+                  <p className="text-xs text-gray-400 mt-1">vs current job performance ({currencySymbols[currency]}{convertCurrency(overviewCPAS, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</p>
                 </>;
               })()
             )}
@@ -249,7 +252,7 @@ export const JobImpactAnalysis: React.FC<JobImpactAnalysisProps> = ({ results, i
                   </>
                 ) : (
                   <>
-                    <div className="text-2xl font-bold">{newCPAS ? `$${newCPAS.toFixed(2)}` : '-'}</div>
+                    <div className="text-2xl font-bold">{newCPAS ? `${currencySymbols[currency]}${convertCurrency(newCPAS, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
                     <Badge variant="default" className="mt-1">{percentImprovement}% Lower</Badge>
                   </>
                 )}

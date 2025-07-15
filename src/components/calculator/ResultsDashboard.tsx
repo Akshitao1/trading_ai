@@ -9,9 +9,12 @@ import { useCalculatorLogic } from '@/hooks/useCalculatorLogic';
 interface ResultsDashboardProps {
   results: PredictionResults;
   inputs: TradingInputs;
+  currency: 'USD' | 'BRL';
+  currencySymbols: { [key: string]: string };
+  convertCurrency: (amountUSD: number, currency: 'USD' | 'BRL') => number;
 }
 
-export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inputs }) => {
+export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inputs, currency, currencySymbols, convertCurrency }) => {
   const { calculatePredictions } = useCalculatorLogic();
   const [overviewResults, setOverviewResults] = useState(results);
 
@@ -62,7 +65,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{typeof overviewResults.estimatedCPAS === 'number' ? `$${overviewResults.estimatedCPAS.toFixed(2)}` : '-'}</div>
+            <div className="text-2xl font-bold">{typeof overviewResults.estimatedCPAS === 'number' ? `${currencySymbols[currency]}${convertCurrency(overviewResults.estimatedCPAS, currency).toFixed(2)}` : '-'}</div>
             <div className="flex items-center gap-2 mt-1">
               {inputs.cpasGoal && (
                 <Badge variant={overviewResults.goalStatus.cpasGoalMet ? "default" : "destructive"}>
@@ -71,7 +74,7 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
               )}
               {inputs.cpasGoal && (
                 <span className="text-sm text-gray-500">
-                  Goal: ${inputs.cpasGoal}
+                  Goal: {currencySymbols[currency]}{inputs.cpasGoal ? convertCurrency(inputs.cpasGoal, currency).toFixed(2) : ''}
                 </span>
               )}
             </div>
@@ -106,13 +109,13 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number' ? `$${budgetSpend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
+            <div className="text-2xl font-bold">{typeof overviewResults.projectedAS === 'number' && typeof overviewResults.estimatedCPAS === 'number' ? `${currencySymbols[currency]}${convertCurrency(budgetSpend, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}</div>
             <div className="flex items-center gap-2 mt-1">
               <Badge variant={overviewResults.goalStatus.budgetExhausted ? "destructive" : "default"}>
                 {budgetUtilization}% Utilized
               </Badge>
               <span className="text-sm text-gray-500">
-                of ${inputs.budget.toLocaleString()}
+                of {currencySymbols[currency]}{convertCurrency(inputs.budget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
           </CardContent>
@@ -180,8 +183,8 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({ results, inp
               </div>
               <Progress value={budgetUtilization} className="h-3" />
               <div className="flex justify-between text-xs text-gray-500">
-                <span>$0</span>
-                <span>${inputs.budget.toLocaleString()} (Budget)</span>
+                <span>{currencySymbols[currency]}0.00</span>
+                <span>{currencySymbols[currency]}{convertCurrency(inputs.budget, currency).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Budget)</span>
               </div>
             </div>
           </CardContent>
